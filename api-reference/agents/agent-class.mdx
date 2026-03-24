@@ -148,7 +148,7 @@ async def acreate_task(
 </ParamField>
 
 <ParamField body="output_format" type="OutputFormat" required={false}>
-  Desired format for the task output (e.g., `OutputFormat.Json`, `OutputFormat.Markdown`).
+  Desired format for the task output. One of `OutputFormat.Text` (`"text"`), `OutputFormat.Markdown` (`"markdown"`), `OutputFormat.Json` (`"json"`), or `OutputFormat.Voice` (`"voice"`).
 </ParamField>
 
 <ParamField body="output_schema" type="Dict" required={false}>
@@ -180,7 +180,7 @@ async def acreate_task(
 </ParamField>
 
 <ParamField body="think_mode" type="ThinkMode" required={false}>
-  Task reasoning mode. Defaults to `ThinkMode.Default`.
+  Task reasoning mode. One of `ThinkMode.Default` (`"default"`) or `ThinkMode.Harder` (`"harder"`). Defaults to `ThinkMode.Default`.
 </ParamField>
 
 <ParamField body="disable_attachment_injection" type="bool" required={false}>
@@ -513,7 +513,7 @@ def delete_session(session_id: str) -> None
 Asynchronously retrieve the storage backend for this agent. Only supported for agents using the **Agno framework** with session storage enabled.
 
 ```python
-async def aget_db() -> AsyncPostgresDb
+async def aget_db(async_db: Optional[bool] = True) -> AsyncPostgresDb
 ```
 
 **Returns**
@@ -569,8 +569,8 @@ def get_db() -> Any
   Deployment mode for the agent. One of `AgentDeploymentType.Serverless` or `AgentDeploymentType.Container`.
 </ResponseField>
 
-<ResponseField name="has_knowledge_bases" type="bool">
-  `True` if one or more knowledge bases are linked to this agent, otherwise `False`. Alias for `search_knowledge`.
+<ResponseField name="search_knowledge" type="bool">
+  `True` if one or more knowledge bases are linked to this agent, otherwise `False`.
 </ResponseField>
 
 <ResponseField name="is_active" type="bool">
@@ -650,7 +650,7 @@ for kb in kbs:
     print(f"Knowledge Base: {kb.name}")
 
 # Search across linked knowledge bases
-if agent.has_knowledge_bases:
+if agent.search_knowledge:
     retriever = agent.knowledge_bases_retriever()
     results = retriever(query="pricing strategy", num_documents=5)
     for result in results:

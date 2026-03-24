@@ -284,6 +284,61 @@ print(message)
 
 ---
 
+### `aget_activity_log` / `get_activity_log`
+
+Retrieve the full activity log for this task. The log contains all messages, tool calls, reasoning steps, sub-agent triggers, and authentication events that occurred during execution.
+
+```python
+from xpander_sdk.modules.tasks.sub_modules.task import Task
+from xpander_sdk.models.activity import (
+    AgentActivityThreadMessage,
+    AgentActivityThreadToolCall,
+    AgentActivityThreadReasoning,
+)
+
+# Load a completed task
+task = await Task.aload(task_id="task_123")
+
+# Async version
+activity_log = await task.aget_activity_log()
+
+# Sync version
+activity_log = task.get_activity_log()
+
+# Process activity log messages
+for message in activity_log.messages:
+    if isinstance(message, AgentActivityThreadMessage):
+        print(f"{message.role}: {message.content.text}")
+    elif isinstance(message, AgentActivityThreadToolCall):
+        print(f"Tool: {message.tool_name}")
+        print(f"Payload: {message.payload}")
+        print(f"Result: {message.result}")
+    elif isinstance(message, AgentActivityThreadReasoning):
+        print(f"Reasoning ({message.type}): {message.thought}")
+```
+
+**Returns:** `AgentActivityThread`
+
+**Raises:** `ModuleException` if the activity log cannot be retrieved.
+
+---
+
+### `areload` / `reload`
+
+Reload the task from the platform, refreshing all attributes with the latest state.
+
+```python
+# Async
+await task.areload()
+
+# Sync
+task.reload()
+```
+
+**Returns:** `self` (the refreshed task instance)
+
+---
+
 ## Properties
 
 | Property | Type | Description |

@@ -3,7 +3,7 @@ title: "MCP server integration"
 description: "Integrate Model Context Protocol servers with your agents"
 ---
 
-Model Context Protocol (MCP) is an open standard that lets AI agents connect to external tool servers over a common interface. The xpander SDK supports both STDIO-based and HTTP-based MCP servers through the `MCPServerDetails` model.
+Model Context Protocol (MCP) is an open standard that lets AI agents connect to external tool servers over a common interface. The xpander SDK supports both local (STDIO-based) and remote (HTTP-based) MCP servers through the `MCPServerDetails` model.
 
 ## What are MCP servers?
 
@@ -17,10 +17,22 @@ MCP servers expose tools (functions) that agents can call during task execution.
 from xpander_sdk import MCPServerType
 ```
 
-| Value | Description |
-|---|---|
-| `MCPServerType.STDIO` | The SDK launches the server as a subprocess and communicates via stdin/stdout |
-| `MCPServerType.HTTP` | The SDK connects to an already-running HTTP server at a given URL |
+| Value | String | Description |
+|---|---|---|
+| `MCPServerType.Local` | `"local"` | Server process runs locally — SDK launches it as a subprocess |
+| `MCPServerType.Remote` | `"remote"` | Server is reachable via HTTP or SSE at a URL |
+
+### MCPServerTransport
+
+```python
+from xpander_sdk.modules.tools_repository.models.mcp import MCPServerTransport
+```
+
+| Value | String | Description |
+|---|---|---|
+| `MCPServerTransport.STDIO` | `"stdio"` | Communicate via standard input/output (Local servers) |
+| `MCPServerTransport.SSE` | `"sse"` | Server-Sent Events |
+| `MCPServerTransport.HTTP_Transport` | `"streamable-http"` | Streamable HTTP (default for Remote servers) |
 
 ### MCPServerAuthType
 
@@ -28,49 +40,82 @@ from xpander_sdk import MCPServerType
 from xpander_sdk import MCPServerAuthType
 ```
 
-`MCPServerAuthType` specifies the authentication mechanism required by the MCP server (for example, OAuth flows). It is configured at the platform level alongside the server details.
+| Value | Description |
+|---|---|
+| `MCPServerAuthType.APIKey` | Static API key authentication |
+| `MCPServerAuthType.OAuth2` | OAuth 2.0 flow |
+| `MCPServerAuthType.CustomHeaders` | Custom HTTP headers |
+| `MCPServerAuthType._None` | No authentication (default) |
 
 ### MCPServerDetails
 
-`MCPServerDetails` describes a single MCP server. Its fields map directly to how the server is started or reached:
+`MCPServerDetails` describes a single MCP server:
 
 ```python
 class MCPServerDetails:
-    name: str                      # Server name
-    type: MCPServerType            # STDIO or HTTP
-    command: Optional[str]         # Command to launch the server (STDIO)
-    args: Optional[List[str]]      # Arguments for the command (STDIO)
-    env: Optional[Dict[str, str]]  # Environment variables for the server process
-    url: Optional[str]             # Server URL (HTTP type)
+    type: Optional[MCPServerType]           # Local or Remote (default: Remote)
+    name: Optional[str]                     # Server name
+    command: Optional[str]                  # Command to launch local server
+    url: Optional[str]                      # URL for remote server
+    transport: Optional[MCPServerTransport] # Transport protocol (default: HTTP_Transport)
+    auth_type: Optional[MCPServerAuthType]  # Auth method (default: _None)
+    api_key: Optional[str]                  # API key for APIKey auth
+    client_id: Optional[str]               # OAuth client ID
+    client_secret: Optional[str]            # OAuth client secret
+    headers: Optional[Dict]                 # Custom headers for CustomHeaders auth
+    env_vars: Optional[Dict]               # Env vars for local server process
+    allowed_tools: Optional[List[str]]      # Restrict exposed tools (empty = all)
+    additional_scopes: Optional[List[str]]  # Extra OAuth scopes
 ```
 
 ## Configuring an MCP server
 
-### STDIO server
+### Local STDIO server
+
+A local MCP server that the SDK launches as a subprocess:
 
 ```python
 from xpander_sdk import MCPServerDetails, MCPServerType
+from xpander_sdk.modules.tools_repository.models.mcp import MCPServerTransport
 
 mcp_server = MCPServerDetails(
     name="data-server",
-    type=MCPServerType.STDIO,
+    type=MCPServerType.Local,
     command="python",
-    args=["-m", "data_mcp_server"],
-    env={"API_KEY": "your-api-key"}
+    transport=MCPServerTransport.STDIO,
+    env_vars={"API_KEY": "your-api-key"}
 )
 ```
 
-### HTTP server
+### Remote HTTP server
+
+A remote MCP server reachable over HTTP:
 
 ```python
-from xpander_sdk import MCPServerDetails, MCPServerType
+from xpander_sdk import MCPServerDetails, MCPServerType, MCPServerAuthType
 
 mcp_server = MCPServerDetails(
-    name="data-server",
-    type=MCPServerType.STDIO,
-    command="python",
-    args=["-m", "mcp_server"],
-    env={"API_KEY": "your-key"}
+    name="remote-tools",
+    type=MCPServerType.Remote,
+    url="https://mcp.example.com/tools",
+    auth_type=MCPServerAuthType.APIKey,
+    api_key="mcp-server-api-key"
+)
+```
+
+### Remote server with OAuth 2.0
+
+```python
+from xpander_sdk import MCPServerDetails, MCPServerType, MCPServerAuthType
+
+mcp_server = MCPServerDetails(
+    name="oauth-server",
+    type=MCPServerType.Remote,
+    url="https://mcp.example.com",
+    auth_type=MCPServerAuthType.OAuth2,
+    client_id="your-client-id",
+    client_secret="your-client-secret",
+    additional_scopes=["read:data", "write:data"]
 )
 ```
 
@@ -97,7 +142,7 @@ if agent.mcp_servers:
     for mcp_server in agent.mcp_servers:
         print(f"MCP Server: {mcp_server.name}")
         print(f"Type: {mcp_server.type}")
-        print(f"Command: {mcp_server.command}")
+        print(f"URL: {mcp_server.url}")
 ```
 
 ## Tools from MCP servers in ToolsRepository

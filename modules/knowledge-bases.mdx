@@ -142,7 +142,7 @@ for result in search_results:
 ### Use the knowledge bases retriever
 
 ```python
-if agent.has_knowledge_bases:
+if agent.search_knowledge:
     retriever = agent.knowledge_bases_retriever()
 
     search_results = retriever(
