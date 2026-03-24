@@ -1,0 +1,161 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "xpander.ai SDK",
+  "projectDescription": "Official Python SDK for xpander.ai — a Backend-as-a-Service platform for building, deploying, and managing AI agents at scale.",
+  "theme": "sequoia",
+  "primaryColor": "#94cb04",
+  "lightColor": "#545454",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Core Modules",
+            "pages": [
+              "modules/agents",
+              "modules/tasks",
+              "modules/tools",
+              "modules/knowledge-bases",
+              "modules/events",
+              "modules/backend"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/async-sync",
+              "guides/event-driven",
+              "guides/mcp-servers",
+              "guides/multi-agent",
+              "guides/streaming",
+              "guides/self-hosted",
+              "guides/error-handling"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/tool-hooks",
+              "examples/auth-events",
+              "examples/local-testing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Agents",
+            "pages": [
+              "api-reference/agents/agents-class",
+              "api-reference/agents/agent-class",
+              "api-reference/agents/agents-list-item"
+            ]
+          },
+          {
+            "group": "Tasks",
+            "pages": [
+              "api-reference/tasks/tasks-class",
+              "api-reference/tasks/task-class",
+              "api-reference/tasks/task-statuses"
+            ]
+          },
+          {
+            "group": "Tools",
+            "pages": [
+              "api-reference/tools/tools-repository",
+              "api-reference/tools/tool-class",
+              "api-reference/tools/register-tool",
+              "api-reference/tools/mcp-server"
+            ]
+          },
+          {
+            "group": "Knowledge Bases",
+            "pages": [
+              "api-reference/knowledge-bases/knowledge-bases-class",
+              "api-reference/knowledge-bases/knowledge-base-class"
+            ]
+          },
+          {
+            "group": "Events",
+            "pages": [
+              "api-reference/events/on-task",
+              "api-reference/events/on-boot-shutdown",
+              "api-reference/events/on-tool-hooks",
+              "api-reference/events/event-types"
+            ]
+          },
+          {
+            "group": "Backend",
+            "pages": [
+              "api-reference/backend/backend-class"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "api-reference/configuration/configuration-class",
+              "api-reference/configuration/self-hosted"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Agent management — create, load, and manage AI agents via async/sync APIs",
+    "Task lifecycle management — create, monitor, stream, and stop task executions",
+    "Tools repository — register local tools with @register_tool decorator and invoke remote tools",
+    "Knowledge bases — create, search, and manage document repositories with semantic search",
+    "Event-driven programming — @on_task, @on_boot, @on_shutdown, and tool hook decorators",
+    "MCP server integration — Model Context Protocol server support (STDIO, HTTP)",
+    "Multi-framework backend support — Agno, Strands Agents, OpenAI Agents",
+    "Real-time event streaming — SSE-based streaming for task execution monitoring",
+    "Self-hosted deployment support — configurable base URL for on-premise installations",
+    "Async-first with sync wrappers — all public APIs available in both async and sync flavors"
+  ],
+  "publicApiSurface": [
+    "Configuration",
+    "Agents",
+    "Agent",
+    "AgentsListItem",
+    "AgentDeploymentType",
+    "Tasks",
+    "Task",
+    "TasksListItem",
+    "AgentExecutionStatus",
+    "ToolsRepository",
+    "Tool",
+    "ToolInvocationResult",
+    "MCPServerDetails",
+    "MCPServerType",
+    "MCPServerAuthType",
+    "KnowledgeBases",
+    "KnowledgeBase",
+    "Backend",
+    "register_tool",
+    "on_task",
+    "on_boot",
+    "on_shutdown",
+    "on_auth_event",
+    "on_tool_before",
+    "on_tool_after",
+    "on_tool_error",
+    "OutputFormat",
+    "Tokens",
+    "User",
+    "build_model_from_schema"
+  ]
+}
