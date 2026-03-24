@@ -1,0 +1,232 @@
+---
+title: "Real-time event streaming"
+description: "Monitor task execution with real-time SSE event streams"
+---
+
+When you create a task with `events_streaming=True`, the xpander platform opens an SSE stream for that task. Your code can iterate over this stream to receive live updates about task progress, tool calls, sub-agent triggers, and final completion.
+
+## Creating a streaming task
+
+Pass `events_streaming=True` when calling `acreate_task` (or `create_task` for the sync variant):
+
+```python
+from xpander_sdk import Agent
+
+agent = await Agent.aload("agent-id")
+
+task = await agent.acreate_task(
+    prompt="Analyze this dataset",
+    file_urls=["https://example.com/data.csv"],
+    events_streaming=True  # Enable event streaming
+)
+```
+
+## Full event loop
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    from xpander_sdk import Agent
+    from xpander_sdk.models.events import TaskUpdateEventType, ToolCallRequest, ToolCallResult
+
+    agent = Agent.load("agent-id")
+    task = await agent.acreate_task(
+        prompt="Analyze this dataset",
+        file_urls=["https://example.com/data.csv"],
+        events_streaming=True
+    )
+
+    async for event in task.aevents():
+        print(f"Event Type: {event.type}")
+        print(f"Task ID: {event.task_id}")
+        print(f"Timestamp: {event.time}")
+
+        if event.type == TaskUpdateEventType.TaskCreated:
+            created_task = event.data
+            print(f"Task created with ID: {created_task.id}")
+
+        elif event.type == TaskUpdateEventType.TaskUpdated:
+            updated_task = event.data
+            print(f"Task Status: {updated_task.status}")
+
+        elif event.type == TaskUpdateEventType.ToolCallRequest:
+            tool_request: ToolCallRequest = event.data
+            print(f"Tool Call Requested:")
+            print(f"  Tool: {tool_request.tool_name}")
+            print(f"  Operation ID: {tool_request.operation_id}")
+            print(f"  Request ID: {tool_request.request_id}")
+            print(f"  Payload: {tool_request.payload}")
+
+        elif event.type == TaskUpdateEventType.ToolCallResult:
+            tool_result: ToolCallResult = event.data
+            print(f"Tool Call Result:")
+            print(f"  Tool: {tool_result.tool_name}")
+            print(f"  Operation ID: {tool_result.operation_id}")
+            print(f"  Result: {tool_result.result}")
+            print(f"  Success: {not tool_result.is_error}")
+            if tool_result.is_error:
+                print(f"  Error: {tool_result.result}")
+
+        elif event.type == TaskUpdateEventType.SubAgentTrigger:
+            sub_agent_data = event.data
+            print(f"Sub-agent triggered: {sub_agent_data}")
+
+        elif event.type == TaskUpdateEventType.TaskFinished:
+            finished_task = event.data
+            print(f"Task finished!")
+            print(f"Final Status: {finished_task.status}")
+            print(f"Result: {finished_task.result}")
+            break
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    from xpander_sdk import Agent
+
+    agent = Agent.load("agent-id")
+    task = agent.create_task(
+        prompt="Analyze this dataset",
+        events_streaming=True
+    )
+
+    # Synchronous event streaming for non-async environments
+    for event in task.events():
+        print(f"Event: {event.type} at {event.time}")
+
+        if event.type == "task_finished":
+            print("Task completed!")
+            break
+    ```
+  </Tab>
+</Tabs>
+
+## Event types
+
+All event types are defined in the `TaskUpdateEventType` enum:
+
+| Event type | String value | Description |
+|---|---|---|
+| `TaskCreated` | `"task_created"` | Task was created |
+| `TaskUpdated` | `"task_updated"` | Task status, progress, or data changed |
+| `TaskFinished` | `"task_finished"` | Task completed (success or failure) |
+| `ToolCallRequest` | `"tool_call_request"` | Agent is about to invoke a tool |
+| `ToolCallResult` | `"tool_call_result"` | Tool call completed and returned results |
+| `SubAgentTrigger` | `"sub_agent_trigger"` | A sub-agent was delegated work |
+
+## Event data models
+
+### TaskUpdateEvent
+
+Every event you receive is a `TaskUpdateEvent`:
+
+```python
+class TaskUpdateEvent:
+    type: TaskUpdateEventType       # Type of the event
+    task_id: str                    # ID of the task this event relates to
+    organization_id: str            # Organization ID
+    time: datetime                  # Timestamp when the event occurred
+    data: TaskUpdateEventData       # Event-specific data
+```
+
+### ToolCallRequest
+
+The `data` field on a `ToolCallRequest` event:
+
+```python
+class ToolCallRequest:
+    request_id: str                    # Unique request identifier
+    operation_id: str                  # Operation identifier
+    tool_call_id: Optional[str]        # Tool call identifier
+    graph_node_id: Optional[str]       # Graph node that triggered the tool call
+    tool_name: Optional[str]           # Name of the tool being called
+    payload: Optional[Any]             # Input data for the tool
+```
+
+### ToolCallResult
+
+The `data` field on a `ToolCallResult` event:
+
+```python
+class ToolCallResult(ToolCallRequest):
+    operation_id: str                  # Operation identifier
+    tool_call_id: Optional[str]        # Tool call identifier
+    tool_name: Optional[str]           # Name of the tool that was called
+    payload: Optional[Any]             # Original input data
+    result: Optional[Any]              # Result returned by the tool
+    is_error: Optional[bool]           # Whether the tool call resulted in an error
+```
+
+## Filtering for specific event types
+
+If you only care about tool activity, filter in the loop:
+
+```python
+async for event in task.aevents():
+    if event.type in ["tool_call_request", "tool_call_result"]:
+        print(f"Tool Event: {event.type}")
+        if hasattr(event.data, 'tool_name'):
+            print(f"Tool: {event.data.tool_name}")
+
+    elif event.type == "task_finished":
+        break
+```
+
+Or use the enum for type-safe comparisons:
+
+```python
+from xpander_sdk.models.events import TaskUpdateEventType
+
+async for event in task.aevents():
+    if event.type == TaskUpdateEventType.SubAgentTrigger:
+        print(f"Sub-agent triggered: {event.data}")
+    elif event.type == TaskUpdateEventType.TaskFinished:
+        break
+```
+
+## Detailed event handler example
+
+Use Python's `match` statement for exhaustive, type-safe event handling:
+
+```python
+from xpander_sdk.models.events import TaskUpdateEventType, ToolCallRequest, ToolCallResult
+from xpander_sdk.modules.tasks.sub_modules.task import TaskUpdateEvent
+
+async def detailed_event_handler(task):
+    async for event in task.aevents():
+        print(f"Event occurred at: {event.time}")
+        print(f"Organization: {event.organization_id}")
+        print(f"Task: {event.task_id}")
+
+        match event.type:
+            case TaskUpdateEventType.TaskCreated:
+                created_task = event.data
+                print(f"New task created: {created_task.id}")
+
+            case TaskUpdateEventType.ToolCallRequest:
+                request: ToolCallRequest = event.data
+                print(f"Tool call requested:")
+                print(f"  Request ID: {request.request_id}")
+                print(f"  Tool: {request.tool_name}")
+                print(f"  Operation: {request.operation_id}")
+                if request.graph_node_id:
+                    print(f"  From node: {request.graph_node_id}")
+
+            case TaskUpdateEventType.ToolCallResult:
+                result: ToolCallResult = event.data
+                print(f"Tool call completed:")
+                print(f"  Tool: {result.tool_name}")
+                print(f"  Success: {not result.is_error}")
+                if result.is_error:
+                    print(f"  Error: {result.result}")
+                else:
+                    print(f"  Result: {result.result}")
+
+            case TaskUpdateEventType.TaskFinished:
+                finished_task = event.data
+                print(f"Task completed: {finished_task.status}")
+                break
+```
+
+<Note>
+`task.aevents()` is an asynchronous generator. It yields events until the stream closes or you `break` out of the loop. Always `break` on `TaskFinished` to avoid waiting indefinitely.
+</Note>

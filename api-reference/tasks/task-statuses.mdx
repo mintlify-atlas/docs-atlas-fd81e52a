@@ -1,0 +1,189 @@
+---
+title: "Task statuses"
+description: "AgentExecutionStatus enum values and task lifecycle"
+---
+
+The `AgentExecutionStatus` enum defines all possible states a task can be in during its lifecycle on the xpander.ai platform.
+
+## Import
+
+```python
+from xpander_sdk.modules.tasks.models.task import AgentExecutionStatus
+```
+
+---
+
+## Enum values
+
+| Value | String | Description |
+|---|---|---|
+| `AgentExecutionStatus.Pending` | `"pending"` | The task has been created and is queued for execution. |
+| `AgentExecutionStatus.Executing` | `"executing"` | The task is currently running. |
+| `AgentExecutionStatus.Paused` | `"paused"` | Execution is paused, waiting to be resumed (e.g., human-in-the-loop approval). |
+| `AgentExecutionStatus.Error` | `"error"` | The task encountered a recoverable or transient error during execution. |
+| `AgentExecutionStatus.Failed` | `"failed"` | The task completed but did not succeed — the final outcome is a failure. |
+| `AgentExecutionStatus.Completed` | `"completed"` | The task finished successfully. |
+| `AgentExecutionStatus.Stopped` | `"stopped"` | The task was manually stopped by calling `stop()` / `astop()`. |
+
+---
+
+## Task lifecycle
+
+The typical state flow for a task:
+
+```
+[Created]
+    │
+    ▼
+ Pending  ──────────────────────────────┐
+    │                                   │
+    ▼                                   │
+Executing ──► Paused ──► Executing      │
+    │                                   │
+    ├──► Error                          │
+    │                                   │
+    ├──► Failed                         │
+    │                                   │
+    ├──► Completed                      │
+    │                                   │
+    └──► Stopped ◄─────────────────────┘
+```
+
+| From | To | Trigger |
+|---|---|---|
+| `Pending` | `Executing` | Platform picks up the task |
+| `Executing` | `Paused` | Human-in-the-loop or ECA approval required |
+| `Paused` | `Executing` | Approval granted, execution resumes |
+| `Executing` | `Error` | Transient error during execution |
+| `Executing` | `Failed` | Terminal failure — task cannot complete |
+| `Executing` | `Completed` | Task finished successfully |
+| `Executing` | `Stopped` | `stop()` / `astop()` called manually |
+| `Pending` | `Stopped` | `stop()` called before execution started |
+
+---
+
+## Checking status
+
+```python
+from xpander_sdk import Tasks
+from xpander_sdk.modules.tasks.models.task import AgentExecutionStatus
+
+tasks = Tasks()
+task = await tasks.aget(task_id="task456")
+
+# Compare enum values directly
+if task.status == AgentExecutionStatus.Completed:
+    print(f"Task finished. Result: {task.result}")
+elif task.status == AgentExecutionStatus.Failed:
+    print("Task failed.")
+elif task.status == AgentExecutionStatus.Executing:
+    print("Task is still running.")
+
+# Check for terminal states
+TERMINAL_STATUSES = {
+    AgentExecutionStatus.Completed,
+    AgentExecutionStatus.Failed,
+    AgentExecutionStatus.Stopped,
+    AgentExecutionStatus.Error,
+}
+
+if task.status in TERMINAL_STATUSES:
+    print("Task is no longer running.")
+```
+
+---
+
+## Setting status
+
+Use `aset_status` / `set_status` on a `Task` instance to update its status. This persists the change to the backend immediately.
+
+```python
+from xpander_sdk.modules.tasks.sub_modules.task import Task
+from xpander_sdk.modules.tasks.models.task import AgentExecutionStatus
+
+task = await Task.aload(task_id="task_123")
+
+# Mark as completed with a result
+await task.aset_status(AgentExecutionStatus.Completed, result="Analysis finished")
+
+# Mark as failed
+await task.aset_status(AgentExecutionStatus.Failed, result="Upstream API unavailable")
+
+# Sync version
+task.set_status(AgentExecutionStatus.Executing)
+```
+
+---
+
+## Polling until complete
+
+```python
+import asyncio
+from xpander_sdk import Tasks
+from xpander_sdk.modules.tasks.models.task import AgentExecutionStatus
+
+TERMINAL = {AgentExecutionStatus.Completed, AgentExecutionStatus.Failed, AgentExecutionStatus.Stopped}
+
+async def wait_for_task(task_id: str, poll_interval: float = 5.0):
+    tasks = Tasks()
+    while True:
+        task = await tasks.aget(task_id=task_id)
+        print(f"Status: {task.status.value}")
+        if task.status in TERMINAL:
+            return task
+        await asyncio.sleep(poll_interval)
+
+task = asyncio.run(wait_for_task("task456"))
+print(f"Final result: {task.result}")
+```
+
+---
+
+## `TasksListItem` class
+
+`TasksListItem` is the lightweight summary object returned by `Tasks.alist()` / `Tasks.list()`. It contains the core metadata for a task without the full execution details.
+
+### Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `id` | `str` | Unique identifier for the task. |
+| `agent_id` | `str` | ID of the agent that owns the task. |
+| `organization_id` | `str` | ID of the owning organization. |
+| `status` | `AgentExecutionStatus` | Current execution status. |
+| `created_at` | `Optional[datetime]` | Timestamp when the task was created. |
+| `updated_at` | `Optional[datetime]` | Timestamp of the last update. |
+| `result` | `Optional[str]` | Final result, if the task has finished. |
+| `title` | `Optional[str]` | Optional human-readable task title. |
+| `user_id` | `Optional[str]` | ID of the user that created the task. |
+| `parent_task_id` | `Optional[str]` | ID of the parent task, if triggered by another task. |
+| `triggering_agent_id` | `Optional[str]` | ID of the agent that triggered this task. |
+| `source_node_type` | `Optional[str]` | Type of the workflow node that triggered execution. |
+
+### `aload` / `load`
+
+Load the full `Task` object from a `TasksListItem`.
+
+```python
+from xpander_sdk import Tasks
+
+tasks = Tasks()
+task_list = await tasks.alist(agent_id="agent123")
+
+for item in task_list:
+    print(f"{item.id}: {item.status.value}")
+
+# Load full task details from a list item
+full_task = await task_list[0].aload()
+print(f"Task input: {full_task.input.text}")
+print(f"Task result: {full_task.result}")
+
+# Sync
+full_task = task_list[0].load()
+```
+
+<ParamField path="configuration" type="Configuration" optional>
+  SDK configuration to use for the request. Uses default configuration if not provided.
+</ParamField>
+
+**Returns:** `Task`

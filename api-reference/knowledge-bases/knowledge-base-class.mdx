@@ -1,0 +1,283 @@
+---
+title: "KnowledgeBase class"
+description: "Manage documents and perform semantic search in a knowledge base"
+---
+
+A `KnowledgeBase` instance represents a single knowledge base. It provides methods for adding and listing documents, performing semantic search, and deleting the knowledge base.
+
+`KnowledgeBase` instances are returned by `KnowledgeBases.acreate()`, `KnowledgeBases.aget()`, `KnowledgeBases.alist()`, and `Agent.aget_knowledge_bases()`.
+
+## Import
+
+```python
+from xpander_sdk import KnowledgeBase
+```
+
+## Properties
+
+<ResponseField name="id" type="str">
+  Unique identifier for the knowledge base.
+</ResponseField>
+
+<ResponseField name="name" type="str">
+  Display name of the knowledge base.
+</ResponseField>
+
+<ResponseField name="description" type="str | None">
+  Optional description of the knowledge base.
+</ResponseField>
+
+<ResponseField name="type" type="KnowledgeBaseType">
+  Type of knowledge base: `"managed"` or `"external"`.
+</ResponseField>
+
+<ResponseField name="organization_id" type="str">
+  The ID of the organization that owns this knowledge base.
+</ResponseField>
+
+<ResponseField name="total_documents" type="int">
+  Total number of documents stored in the knowledge base.
+</ResponseField>
+
+## Document management
+
+### `aadd_documents` / `add_documents`
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    async def aadd_documents(
+        document_urls: List[str],
+        sync: Optional[bool] = False
+    ) -> List[KnowledgeBaseDocumentItem]
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    def add_documents(
+        document_urls: List[str],
+        sync: Optional[bool] = False
+    ) -> List[KnowledgeBaseDocumentItem]
+    ```
+  </Tab>
+</Tabs>
+
+Add one or more documents to the knowledge base by URL.
+
+<ParamField body="document_urls" type="List[str]" required>
+  List of publicly accessible document URLs (PDF, TXT, DOCX, etc.).
+</ParamField>
+
+<ParamField body="sync" type="bool" optional>
+  When `True`, waits for the documents to finish processing before returning. Defaults to `False`.
+</ParamField>
+
+**Returns:** `List[KnowledgeBaseDocumentItem]`
+
+```python
+documents = await kb.aadd_documents(
+    document_urls=[
+        "https://example.com/manual.pdf",
+        "https://example.com/faq.txt"
+    ],
+    sync=True
+)
+print(f"Added {len(documents)} document(s)")
+```
+
+### `alist_documents` / `list_documents`
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    async def alist_documents() -> List[KnowledgeBaseDocumentItem]
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    def list_documents() -> List[KnowledgeBaseDocumentItem]
+    ```
+  </Tab>
+</Tabs>
+
+List all documents currently stored in the knowledge base.
+
+**Returns:** `List[KnowledgeBaseDocumentItem]`
+
+```python
+docs = await kb.alist_documents()
+for doc in docs:
+    print(f"Document: {doc.document_url} (id: {doc.id})")
+```
+
+### `adelete_multiple_documents` / `delete_multiple_documents`
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    async def adelete_multiple_documents(document_ids: List[str]) -> None
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    def delete_multiple_documents(document_ids: List[str]) -> None
+    ```
+  </Tab>
+</Tabs>
+
+Delete one or more documents from the knowledge base by their IDs.
+
+<ParamField body="document_ids" type="List[str]" required>
+  List of document IDs to delete.
+</ParamField>
+
+```python
+docs = await kb.alist_documents()
+doc_ids = [doc.id for doc in docs]
+await kb.adelete_multiple_documents(document_ids=doc_ids)
+```
+
+## Search
+
+### `asearch` / `search`
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    async def asearch(
+        search_query: str,
+        use_bubble: Optional[bool] = False,
+        bubble_size: Optional[int] = 1000,
+        top_k: Optional[int] = 10
+    ) -> List[KnowledgeBaseSearchResult]
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    def search(
+        search_query: str,
+        use_bubble: Optional[bool] = False,
+        bubble_size: Optional[int] = 1000,
+        top_k: Optional[int] = 10
+    ) -> List[KnowledgeBaseSearchResult]
+    ```
+  </Tab>
+</Tabs>
+
+Perform a semantic search over all documents in the knowledge base.
+
+<ParamField body="search_query" type="str" required>
+  The search term or phrase to look up.
+</ParamField>
+
+<ParamField body="use_bubble" type="bool" optional>
+  When `True`, enables bubble search mode for contextual results that expand around matching passages. Defaults to `False`.
+</ParamField>
+
+<ParamField body="bubble_size" type="int" optional>
+  The size (in characters) of the context window around each matching passage when `use_bubble=True`. Defaults to `1000`.
+</ParamField>
+
+<ParamField body="top_k" type="int" optional>
+  Maximum number of results to return. Defaults to `10`.
+</ParamField>
+
+**Returns:** `List[KnowledgeBaseSearchResult]`
+
+```python
+results = await kb.asearch(
+    search_query="password reset instructions",
+    use_bubble=True,
+    bubble_size=1500,
+    top_k=5
+)
+for result in results:
+    print(f"Score: {result.score:.3f}")
+    print(f"Content: {result.content[:200]}")
+    print()
+```
+
+## Management
+
+### `adelete` / `delete`
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    async def adelete() -> None
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    def delete() -> None
+    ```
+  </Tab>
+</Tabs>
+
+Permanently delete the knowledge base and all its documents.
+
+<Warning>
+  This operation is irreversible. All documents stored in the knowledge base will be deleted.
+</Warning>
+
+```python
+await kb.adelete()
+```
+
+## KnowledgeBaseDocumentItem
+
+Represents a document stored within a knowledge base.
+
+<ResponseField name="id" type="str | None">
+  Unique identifier for the document.
+</ResponseField>
+
+<ResponseField name="kb_id" type="str | None">
+  The ID of the knowledge base this document belongs to.
+</ResponseField>
+
+<ResponseField name="document_url" type="str">
+  The original URL of the document.
+</ResponseField>
+
+<ResponseField name="raw_data" type="str | None">
+  The extracted plain-text content of the document, if available.
+</ResponseField>
+
+## KnowledgeBaseSearchResult
+
+Represents a single result from a semantic search.
+
+<ResponseField name="content" type="str">
+  The text passage that matched the search query.
+</ResponseField>
+
+<ResponseField name="score" type="float">
+  Relevance score for this result. Higher values indicate a closer match.
+</ResponseField>
+
+## Full example
+
+```python
+from xpander_sdk import KnowledgeBases
+
+kbs = KnowledgeBases()
+
+# Create a knowledge base and add documents
+kb = await kbs.acreate(name="Product KB")
+
+document_url = "https://ontheline.trincoll.edu/images/bookdown/sample-local-pdf.pdf"
+created_docs = await kb.aadd_documents(
+    document_urls=[document_url],
+    sync=True
+)
+print(f"Indexed {len(created_docs)} document(s)")
+
+# Search
+search_results = await kb.asearch(search_query="Praesent")
+for result in search_results:
+    print(f"[{result.score:.3f}] {result.content[:100]}")
+
+# Clean up
+await kb.adelete()
+```

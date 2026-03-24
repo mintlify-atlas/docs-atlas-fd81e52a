@@ -1,0 +1,206 @@
+---
+title: "Events module"
+description: "Handle incoming task execution requests with @on_task, stream real-time task events, and manage agent lifecycle with @on_boot and @on_shutdown."
+---
+
+The Events module provides two distinct event systems that work together but serve different purposes. Agent Event Listeners react to incoming task requests dispatched by the platform; Task Event Streaming monitors a specific task execution as it runs.
+
+## Two event systems
+
+<CardGroup cols={2}>
+  <Card title="Agent Event Listeners" icon="satellite-dish">
+    Use `@on_task`, `@on_boot`, and `@on_shutdown` to handle incoming execution requests and manage the agent lifecycle.
+  </Card>
+  <Card title="Task Event Streaming" icon="wave-square">
+    Call `task.aevents()` to stream `TaskUpdateEvent` objects in real time as a task progresses.
+  </Card>
+</CardGroup>
+
+## Decorators
+
+| Decorator | Purpose |
+|---|---|
+| `@on_task` | Register a function as the handler for incoming task execution requests |
+| `@on_boot` | Runs before event listeners start — ideal for initialization |
+| `@on_shutdown` | Runs during shutdown — ideal for cleanup |
+| `@on_tool_before` | Hook called before a tool is invoked |
+| `@on_tool_after` | Hook called after a tool completes successfully |
+| `@on_tool_error` | Hook called when a tool invocation raises an error |
+
+## `TaskUpdateEventType` enum
+
+| Value | Description |
+|---|---|
+| `TaskCreated` | A new task was created |
+| `TaskUpdated` | Task status or data was updated |
+| `TaskFinished` | Task completed (success or failure) |
+| `ToolCallRequest` | Agent requested a tool invocation |
+| `ToolCallResult` | A tool call returned a result |
+| `SubAgentTrigger` | A sub-agent was triggered during execution |
+
+## Examples
+
+### Agent Event Listener with `@on_task`
+
+<Tabs>
+  <Tab title="Async handler">
+    ```python
+    from xpander_sdk import on_task
+
+    @on_task
+    async def handle_task(task):
+        print(f"Task Received: {task.id}")
+        print(f"Task Status: {task.status}")
+        print(f"Task Input: {task.input.text}")
+
+        # Your processing logic here
+
+        task.status = "completed"
+        task.result = "Task processed successfully"
+        return task
+    ```
+  </Tab>
+  <Tab title="Sync handler">
+    ```python
+    from xpander_sdk import on_task
+
+    @on_task
+    def sync_task_handler(task):
+        print(f"Handling task synchronously: {task.id}")
+        return task
+    ```
+  </Tab>
+  <Tab title="With configuration">
+    ```python
+    from xpander_sdk import on_task
+
+    @on_task(configuration=my_config)
+    async def custom_async_task_handler(task):
+        print(f"Custom async processing: {task.id}")
+        return task
+    ```
+  </Tab>
+</Tabs>
+
+### Lifecycle hooks: `@on_boot` and `@on_shutdown`
+
+```python
+from xpander_sdk import on_boot, on_shutdown
+
+@on_boot
+async def initialize():
+    print("Agent is starting up — initializing resources")
+
+@on_shutdown
+async def cleanup():
+    print("Agent is shutting down — releasing resources")
+```
+
+### Tool hooks: `on_tool_before`, `on_tool_after`, `on_tool_error`
+
+```python
+from xpander_sdk import on_tool_before, on_tool_after, on_tool_error
+
+@on_tool_before
+def log_before_tool(tool_name, payload):
+    print(f"About to invoke: {tool_name}")
+
+@on_tool_after
+def log_after_tool(tool_name, result):
+    print(f"Tool {tool_name} completed")
+
+@on_tool_error
+def handle_tool_error(tool_name, error):
+    print(f"Tool {tool_name} raised: {error}")
+```
+
+### Task Event Streaming
+
+Create a task with `events_streaming=True`, then consume events with the `TaskUpdateEventType` enum for type-safe matching:
+
+```python
+from xpander_sdk import Agent
+from xpander_sdk.models.events import TaskUpdateEventType, ToolCallRequest, ToolCallResult
+
+agent = Agent.load("agent-id")
+task = await agent.acreate_task(
+    prompt="Analyze this dataset",
+    file_urls=["https://example.com/data.csv"],
+    events_streaming=True
+)
+
+async for event in task.aevents():
+    print(f"Event Type: {event.type}")
+    print(f"Task ID: {event.task_id}")
+    print(f"Timestamp: {event.time}")
+
+    if event.type == TaskUpdateEventType.TaskCreated:
+        created_task = event.data
+        print(f"Task created with ID: {created_task.id}")
+
+    elif event.type == TaskUpdateEventType.TaskUpdated:
+        updated_task = event.data
+        print(f"Task Status: {updated_task.status}")
+
+    elif event.type == TaskUpdateEventType.ToolCallRequest:
+        tool_request: ToolCallRequest = event.data
+        print(f"Tool requested: {tool_request.tool_name}")
+        print(f"Payload: {tool_request.payload}")
+
+    elif event.type == TaskUpdateEventType.ToolCallResult:
+        tool_result: ToolCallResult = event.data
+        print(f"Tool: {tool_result.tool_name}")
+        print(f"Success: {not tool_result.is_error}")
+        if tool_result.is_error:
+            print(f"Error: {tool_result.result}")
+
+    elif event.type == TaskUpdateEventType.TaskFinished:
+        finished_task = event.data
+        print(f"Final Status: {finished_task.status}")
+        print(f"Result: {finished_task.result}")
+        break
+```
+
+### Local task testing
+
+Use `LocalTaskTest` with `@on_task` to test your handler without a live platform connection:
+
+```python
+from xpander_sdk.modules.tasks.models.task import LocalTaskTest, AgentExecutionInput
+from xpander_sdk.models.shared import OutputFormat
+from xpander_sdk import on_task
+
+local_task = LocalTaskTest(
+    input=AgentExecutionInput(text="What can you do?"),
+    output_format=OutputFormat.Json,
+    output_schema={"capabilities": "list of capabilities"}
+)
+
+@on_task(test_task=local_task)
+async def handle_test_task(task):
+    task.result = {
+        "capabilities": [
+            "Data analysis",
+            "Text processing",
+            "API integration"
+        ]
+    }
+    return task
+```
+
+## Event models
+
+```python
+class TaskUpdateEvent:
+    type: TaskUpdateEventType       # Type of the event
+    task_id: str                    # ID of the task this event relates to
+    organization_id: str            # Organization ID
+    time: datetime                  # Timestamp when the event occurred
+    data: TaskUpdateEventData       # Task, ToolCallRequest, or ToolCallResult
+```
+
+## API reference
+
+For full method signatures and parameter details, see:
+
+- [@on_task decorator](/api-reference/events/on-task)

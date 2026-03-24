@@ -1,0 +1,167 @@
+---
+title: "Multi-agent orchestration"
+description: "Chain and orchestrate multiple AI agents for complex workflows"
+---
+
+Complex workflows often require the specialised capabilities of more than one agent. The xpander SDK makes it straightforward to load multiple agents, chain their outputs together, run them in parallel, and monitor sub-agent activity through the event streaming system.
+
+## Loading multiple agents
+
+Use the `Agents` module to list and load all available agents, then select the specialists you need:
+
+```python
+from xpander_sdk import Agents, Configuration
+
+config = Configuration(
+    api_key="your-api-key",
+    organization_id="your-org-id"
+)
+agents_manager = Agents(configuration=config)
+
+# List all agents
+agents_list = await agents_manager.alist()
+for agent_item in agents_list:
+    print(f"Agent: {agent_item.name} (ID: {agent_item.id})")
+
+# Load specific specialised agents
+data_agent = await agents_manager.aget("data-agent-id")
+writer_agent = await agents_manager.aget("writer-agent-id")
+```
+
+You can also load agents directly from a list item:
+
+```python
+agents_list = await agents_manager.alist()
+if agents_list:
+    # Load full agent details from the first list item
+    full_agent = await agents_list[0].aload()
+    print(f"Loaded agent: {full_agent.name}")
+```
+
+## Chaining tasks across agents
+
+Pass the output of one agent as the input to the next to build sequential pipelines:
+
+```python
+import asyncio
+from xpander_sdk import Agents, Configuration
+
+config = Configuration(
+    api_key="your-api-key",
+    organization_id="your-org-id"
+)
+agents_manager = Agents(configuration=config)
+
+data_agent = await agents_manager.aget("data-agent-id")
+writer_agent = await agents_manager.aget("writer-agent-id")
+
+# Step 1: analyse data with the data agent
+analysis_task = await data_agent.acreate_task(prompt="Analyze sales data")
+
+# Step 2: write a report using the analysis result
+report_task = await writer_agent.acreate_task(
+    prompt=f"Write a report based on: {analysis_task.result}"
+)
+
+print(f"Report task ID: {report_task.id}")
+print(f"Report status: {report_task.status}")
+```
+
+## Parallel agent execution
+
+For independent workloads, use `asyncio.gather()` to run multiple agents simultaneously:
+
+```python
+import asyncio
+from xpander_sdk import Agents, Configuration
+
+config = Configuration(
+    api_key="your-api-key",
+    organization_id="your-org-id"
+)
+agents_manager = Agents(configuration=config)
+
+data_agent = await agents_manager.aget("data-agent-id")
+writer_agent = await agents_manager.aget("writer-agent-id")
+
+# Run two agents in parallel
+analysis_task, draft_task = await asyncio.gather(
+    data_agent.acreate_task(prompt="Analyze Q4 sales data"),
+    writer_agent.acreate_task(prompt="Draft executive summary template")
+)
+
+print(f"Analysis task: {analysis_task.id}")
+print(f"Draft task: {draft_task.id}")
+```
+
+## Monitoring with event streaming
+
+Enable `events_streaming=True` when creating a task to receive real-time updates, including when a sub-agent is triggered during execution:
+
+```python
+from xpander_sdk import Agent
+from xpander_sdk.models.events import TaskUpdateEventType
+
+agent = await Agent.aload("orchestrator-agent-id")
+
+task = await agent.acreate_task(
+    prompt="complex analysis task",
+    events_streaming=True
+)
+
+async for event in task.aevents():
+    if event.type == TaskUpdateEventType.TaskCreated:
+        print(f"Task created: {event.data.id}")
+
+    elif event.type == TaskUpdateEventType.TaskUpdated:
+        print(f"Task status: {event.data.status}")
+
+    elif event.type == TaskUpdateEventType.SubAgentTrigger:
+        # Fired when the orchestrator delegates work to a sub-agent
+        sub_agent_data = event.data
+        print(f"Sub-agent triggered: {sub_agent_data}")
+
+    elif event.type == TaskUpdateEventType.ToolCallRequest:
+        print(f"Tool called: {event.data.tool_name}")
+
+    elif event.type == TaskUpdateEventType.TaskFinished:
+        print(f"Final status: {event.data.status}")
+        print(f"Result: {event.data.result}")
+        break
+```
+
+## SubAgentTrigger events
+
+The `SubAgentTrigger` event type is part of `TaskUpdateEventType` and fires whenever an orchestrating agent hands off work to another agent. This lets you build observability into multi-agent workflows without any additional infrastructure:
+
+```python
+from xpander_sdk.models.events import TaskUpdateEventType
+
+async for event in task.aevents():
+    if event.type == TaskUpdateEventType.SubAgentTrigger:
+        print(f"Sub-agent triggered: {event.data}")
+    elif event.type == TaskUpdateEventType.TaskFinished:
+        break
+```
+
+<Tip>
+For long-running multi-agent pipelines, store intermediate task IDs so you can resume monitoring if the client disconnects. Use `tasks.aget(task_id)` to reload a task and call `task.aevents()` again.
+</Tip>
+
+## Deployment types
+
+Each agent has a `deployment_type` that affects how it executes:
+
+```python
+from xpander_sdk import AgentDeploymentType
+
+if agent.deployment_type == AgentDeploymentType.Serverless:
+    print("Agent is configured for serverless deployment")
+elif agent.deployment_type == AgentDeploymentType.Container:
+    print("Agent is configured for container deployment")
+```
+
+| Deployment type | Best for |
+|---|---|
+| `Serverless` | Lightweight tasks, bursty workloads |
+| `Container` | Resource-intensive, long-running operations |

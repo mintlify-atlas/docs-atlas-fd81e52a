@@ -1,0 +1,202 @@
+---
+title: "Event-driven agent deployment"
+description: "Deploy AI agents that respond to incoming task execution requests"
+---
+
+xpander.ai agents can be deployed as long-running services that listen for incoming task execution requests over Server-Sent Events (SSE). The Events module provides decorators that make it straightforward to write handlers for every phase of the agent lifecycle.
+
+## How it works
+
+When your process starts, the SDK opens an SSE connection to the xpander platform. The platform routes task execution requests to your registered handlers. Your handler processes the task and returns it; the SDK sends the result back to the platform automatically.
+
+<Steps>
+  <Step title="Install the SDK">
+    ```bash
+    pip install xpander-sdk
+    ```
+  </Step>
+  <Step title="Write lifecycle handlers">
+    Use `@on_boot` to initialize resources, `@on_task` to handle incoming tasks, and `@on_shutdown` to clean up:
+
+    ```python
+    from xpander_sdk import on_boot, on_task, on_shutdown
+
+    @on_boot
+    async def startup():
+        print("Agent service starting up")
+        # Initialize database connections, load models, etc.
+
+    @on_task
+    async def handle_task(task):
+        print(f"Processing task: {task.id}")
+        print(f"Input: {task.input.text}")
+
+        # Your agent logic here
+        task.result = "Task processed successfully"
+        return task
+
+    @on_shutdown
+    async def teardown():
+        print("Agent service shutting down")
+        # Release resources, close connections, etc.
+    ```
+  </Step>
+  <Step title="Run the service">
+    Import or run your module. The decorators register handlers automatically; the SDK starts listening when the process runs:
+
+    ```python
+    # agent_service.py — run with: python agent_service.py
+    from xpander_sdk import on_boot, on_task, on_shutdown
+
+    @on_boot
+    async def startup():
+        print("Ready")
+
+    @on_task
+    async def handle_task(task):
+        task.result = "Done"
+        return task
+    ```
+  </Step>
+</Steps>
+
+## @on_task decorator
+
+The `@on_task` decorator registers a function as a task handler. Both async and sync functions are supported:
+
+```python
+from xpander_sdk import on_task
+
+# Async handler
+@on_task
+async def handle_task(task):
+    print(f"Task Received: {task.id}")
+    print(f"Task Status: {task.status}")
+    print(f"Task Input: {task.input.text}")
+
+    # Process the task
+    task.status = "completed"
+    task.result = "Task processed successfully"
+    return task
+
+# Sync handler
+@on_task
+def sync_task_handler(task):
+    print(f"Handling task synchronously: {task.id}")
+    return task
+```
+
+### With explicit configuration
+
+Pass a `Configuration` object when you need the handler to use specific credentials:
+
+```python
+from xpander_sdk import on_task, Configuration
+
+my_config = Configuration(
+    api_key="your-api-key",
+    organization_id="your-org-id"
+)
+
+@on_task(configuration=my_config)
+async def custom_async_task_handler(task):
+    print(f"Custom async processing: {task.id}")
+    return task
+```
+
+## @on_boot and @on_shutdown decorators
+
+`@on_boot` runs before the event listener starts — use it for one-time initialization. `@on_shutdown` runs when the process receives a shutdown signal — use it to release resources.
+
+Both support async and sync functions and execute handlers in registration order:
+
+```python
+from xpander_sdk import on_boot, on_shutdown
+
+@on_boot
+async def initialize_db():
+    print("Connecting to database...")
+    # Set up connections
+
+@on_boot
+def load_config():
+    print("Loading configuration...")
+    # Runs after initialize_db
+
+@on_shutdown
+async def close_db():
+    print("Closing database connections...")
+```
+
+## Multiple @on_task handlers
+
+You can register multiple task handlers. All registered handlers are invoked for every incoming task:
+
+```python
+from xpander_sdk import Events, on_task
+
+@on_task
+async def handle_task(task):
+    print(f"Task Received: {task.id}")
+    task.result = "Task processed successfully"
+    return task
+
+@on_task
+def sync_task_handler(task):
+    print(f"Handling task synchronously: {task.id}")
+    return task
+
+@on_task(configuration=my_config)
+async def custom_async_task_handler(task):
+    print(f"Custom async processing: {task.id}")
+    return task
+
+# You can also register handlers explicitly on an Events instance
+events = Events()
+events.register(on_task=handle_task)
+```
+
+## Local task testing
+
+During development, use `LocalTaskTest` to run your handler against a synthetic task without connecting to the platform:
+
+```python
+from xpander_sdk.modules.tasks.models.task import LocalTaskTest, AgentExecutionInput
+from xpander_sdk.models.shared import OutputFormat
+from xpander_sdk import on_task
+
+local_task = LocalTaskTest(
+    input=AgentExecutionInput(text="What can you do?"),
+    output_format=OutputFormat.Json,
+    output_schema={"capabilities": "list of capabilities"}
+)
+
+@on_task(test_task=local_task)
+async def handle_test_task(task):
+    task.result = {
+        "capabilities": [
+            "Data analysis",
+            "Text processing",
+            "API integration"
+        ]
+    }
+    return task
+```
+
+## Graceful shutdown
+
+To stop the event listener programmatically:
+
+```python
+from xpander_sdk import Events
+
+events = Events()
+# ... start listening ...
+
+# Stop gracefully
+await events.stop()
+```
+
+<Tip>
+Use `@on_shutdown` for cleanup logic triggered by OS signals (SIGTERM/SIGINT). Use `events.stop()` when you need to stop the listener from within your own application code.
+</Tip>

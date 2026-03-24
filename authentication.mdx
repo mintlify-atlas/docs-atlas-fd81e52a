@@ -1,0 +1,137 @@
+---
+title: "Authentication"
+description: "Configure API credentials for xpander.ai"
+---
+
+The SDK requires an API key and an organization ID to communicate with the xpander.ai platform. You can provide these credentials in three ways.
+
+## Required credentials
+
+| Variable | Description |
+|----------|-------------|
+| `XPANDER_API_KEY` | Your xpander.ai API key |
+| `XPANDER_ORGANIZATION_ID` | Your organization identifier |
+
+## Optional settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `XPANDER_BASE_URL` | `https://inbound.xpander.ai` | API base URL. Override for self-hosted deployments. |
+| `XPANDER_AGENT_ID` | — | Agent ID used by the `Backend` module when not passed explicitly. |
+
+## Configuration methods
+
+<Tabs>
+  <Tab title="Environment variables">
+    Set credentials in your shell before running your script. This is the recommended approach for production environments.
+
+    ```bash
+    export XPANDER_API_KEY="your-api-key"
+    export XPANDER_ORGANIZATION_ID="your-org-id"
+    export XPANDER_BASE_URL="https://inbound.xpander.ai"  # optional
+    export XPANDER_AGENT_ID="your-agent-id"               # optional
+    ```
+
+    Then create a `Configuration` with no arguments — it reads the environment automatically:
+
+    ```python
+    from xpander_sdk import Configuration
+
+    config = Configuration()
+    ```
+  </Tab>
+
+  <Tab title="Configuration object">
+    Pass credentials directly when constructing `Configuration`. This is useful for multi-tenant applications or when credentials are managed by a secrets manager:
+
+    ```python
+    from xpander_sdk import Configuration
+
+    config = Configuration(
+        api_key="your-api-key",
+        organization_id="your-org-id",
+        base_url="https://inbound.xpander.ai",  # optional
+        agent_id="your-agent-id"                # optional
+    )
+    ```
+  </Tab>
+
+  <Tab title=".env file">
+    Store credentials in a `.env` file and load them with `python-dotenv` (included in the base install):
+
+    ```text .env
+    XPANDER_API_KEY=your-api-key
+    XPANDER_ORGANIZATION_ID=your-org-id
+    ```
+
+    ```python
+    from dotenv import load_dotenv
+    from xpander_sdk import Configuration
+
+    load_dotenv()  # loads variables from .env into the environment
+    config = Configuration()
+    ```
+
+    <Tip>
+      Add `.env` to your `.gitignore` to keep credentials out of version control.
+    </Tip>
+  </Tab>
+</Tabs>
+
+<Warning>
+  Never commit API keys or organization IDs to source control. Use environment variables, a secrets manager, or a `.env` file excluded from your repository.
+</Warning>
+
+## Configuration class reference
+
+The `Configuration` class is a Pydantic model with the following fields:
+
+```python
+from xpander_sdk import Configuration
+
+config = Configuration(
+    api_key="...",           # str | None — defaults to XPANDER_API_KEY env var
+    organization_id="...",   # str | None — defaults to XPANDER_ORGANIZATION_ID env var
+    base_url="...",          # str | None — auto-detected from environment
+    agent_id="...",          # str | None — defaults to None
+)
+```
+
+All fields are optional at construction time; missing values fall back to their corresponding environment variables. If neither the argument nor the environment variable is set, the field is `None`.
+
+## Verify your configuration
+
+Call `agents.alist()` to confirm your credentials are valid:
+
+```python
+import asyncio
+from xpander_sdk import Configuration, Agents
+
+async def main():
+    config = Configuration()
+    agents = Agents(configuration=config)
+    agent_list = await agents.alist()
+    print(f"Authenticated. Found {len(agent_list)} agents.")
+
+asyncio.run(main())
+```
+
+A successful response confirms the SDK can reach the API with your credentials.
+
+## Self-hosted deployments
+
+If you run a self-hosted xpander.ai deployment, set `XPANDER_BASE_URL` (or `base_url`) to your Agent Controller endpoint:
+
+```python
+from xpander_sdk import Configuration
+
+config = Configuration(
+    api_key="your-agent-controller-api-key",
+    organization_id="your-org-id",
+    base_url="https://agent-controller.your-domain.com"
+)
+```
+
+<Note>
+  For self-hosted deployments, use the Agent Controller API key generated during Helm installation — not your xpander.ai cloud API key.
+</Note>

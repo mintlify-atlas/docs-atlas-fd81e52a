@@ -1,0 +1,134 @@
+---
+title: "Configuration class"
+description: "Configure API credentials and connection settings"
+---
+
+The `Configuration` class holds all settings required to connect to the xpander.ai platform, including your API key, organization ID, and the base URL.
+
+Configuration values can be supplied explicitly, read from environment variables, or a combination of both.
+
+## Import
+
+```python
+from xpander_sdk import Configuration
+```
+
+## Fields
+
+<ResponseField name="api_key" type="str | None">
+  Your xpander.ai API key for authentication.
+
+  **Default:** value of the `XPANDER_API_KEY` environment variable.
+</ResponseField>
+
+<ResponseField name="organization_id" type="str | None">
+  Your organization identifier.
+
+  **Default:** value of the `XPANDER_ORGANIZATION_ID` environment variable.
+</ResponseField>
+
+<ResponseField name="base_url" type="str | None">
+  The base URL for xpander.ai API endpoints.
+
+  **Default:** value of the `XPANDER_BASE_URL` environment variable, or `https://inbound.xpander.ai` if not set.
+
+  For self-hosted deployments, point this to your Agent Controller endpoint. See [Self-hosted configuration](/api-reference/configuration/self-hosted).
+</ResponseField>
+
+<ResponseField name="agent_id" type="str | None">
+  Optional agent ID to associate with this configuration context.
+
+  **Default:** `None`. Falls back to `XPANDER_AGENT_ID` environment variable in modules that support it.
+</ResponseField>
+
+## Initialization
+
+### Option 1: Explicit values
+
+Provide credentials directly in code:
+
+```python
+from xpander_sdk import Configuration
+
+config = Configuration(
+    api_key="xpander-api-key-here",
+    organization_id="your-organization-id"
+)
+```
+
+### Option 2: Environment variables
+
+Set the variables and instantiate with no arguments:
+
+```bash
+export XPANDER_API_KEY="xpander-api-key-here"
+export XPANDER_ORGANIZATION_ID="your-organization-id"
+```
+
+```python
+from xpander_sdk import Configuration
+
+config = Configuration()  # Reads from environment
+```
+
+### Option 3: Mixed
+
+Supply some values explicitly and let others fall back to environment variables:
+
+```python
+from xpander_sdk import Configuration
+import os
+
+config = Configuration(
+    api_key=os.getenv("XPANDER_API_KEY"),
+    organization_id="specific-org-id"
+)
+```
+
+## Methods
+
+### `get_full_url`
+
+```python
+def get_full_url() -> str
+```
+
+Returns the complete URL to use for API requests. For cloud deployments this is simply `base_url`. For Agent Controller (self-hosted) endpoints, the `organization_id` is automatically appended to the URL path.
+
+```python
+# Cloud
+config = Configuration(base_url="https://inbound.xpander.ai", organization_id="org123")
+config.get_full_url()  # -> 'https://inbound.xpander.ai'
+
+# Self-hosted Agent Controller
+config = Configuration(base_url="https://agent-controller.example.com", organization_id="org123")
+config.get_full_url()  # -> 'https://agent-controller.example.com/org123'
+```
+
+## Environment variables reference
+
+| Variable | Field | Required |
+|----------|-------|----------|
+| `XPANDER_API_KEY` | `api_key` | Yes |
+| `XPANDER_ORGANIZATION_ID` | `organization_id` | Yes |
+| `XPANDER_BASE_URL` | `base_url` | No (defaults to `https://inbound.xpander.ai`) |
+| `XPANDER_AGENT_ID` | `agent_id` | No |
+
+## Usage with other modules
+
+All SDK modules accept an optional `configuration` parameter:
+
+```python
+from xpander_sdk import Configuration, Agents, KnowledgeBases, Backend
+
+config = Configuration(
+    api_key="your-api-key",
+    organization_id="your-org-id"
+)
+
+agents = Agents(configuration=config)
+kbs = KnowledgeBases(configuration=config)
+backend = Backend(configuration=config)
+```
+
+When `configuration` is omitted, modules create a default `Configuration()` instance that reads from environment variables.

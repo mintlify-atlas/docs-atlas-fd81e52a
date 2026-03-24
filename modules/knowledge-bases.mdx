@@ -1,0 +1,173 @@
+---
+title: "Knowledge bases module"
+description: "Create and manage knowledge repositories, add documents, run semantic search, and attach knowledge bases to agents."
+---
+
+The Knowledge Bases module provides full lifecycle management for knowledge repositories on the xpander.ai platform. You can create knowledge bases, populate them with documents from URLs, search them semantically, and attach them to agents so those agents can answer questions grounded in your data.
+
+<CardGroup cols={2}>
+  <Card title="Create & list" icon="database">
+    Create named knowledge bases and list all repositories in your organization.
+  </Card>
+  <Card title="Document management" icon="file-lines">
+    Add documents from URLs, list documents, and delete them individually or in bulk.
+  </Card>
+  <Card title="Semantic search" icon="magnifying-glass">
+    Run `asearch()` with a natural language query and retrieve ranked results with scores.
+  </Card>
+  <Card title="Agent attachment" icon="link">
+    Attach a knowledge base to an agent by instance or by ID so the agent can query it.
+  </Card>
+</CardGroup>
+
+## Key classes
+
+| Class | Purpose |
+|---|---|
+| `KnowledgeBases` | Module-level manager — create, list, and get knowledge bases |
+| `KnowledgeBase` | A single knowledge base with document and search methods |
+| `KnowledgeBaseDocumentItem` | Represents a document in the knowledge base |
+| `KnowledgeBaseSearchResult` | A single ranked search result with `content` and `score` |
+
+## Examples
+
+### Create, list, and retrieve knowledge bases
+
+<Steps>
+  <Step title="Initialize the module">
+    ```python
+    from xpander_sdk import KnowledgeBases
+
+    kbs = KnowledgeBases()
+    ```
+  </Step>
+  <Step title="List all knowledge bases">
+    ```python
+    kbs_list = await kbs.alist()
+    for kb in kbs_list:
+        print(f"{kb.name} — {kb.total_documents} documents")
+    ```
+  </Step>
+  <Step title="Get a specific knowledge base">
+    ```python
+    kb = await kbs.aget(knowledge_base_id="2fd003b1-51b8-4f68-b0e7-68c3d63d70c9")
+    ```
+  </Step>
+  <Step title="Create a new knowledge base">
+    ```python
+    created_kb = await kbs.acreate(name="KB Test")
+    print(f"Created: {created_kb.name}")
+    ```
+  </Step>
+</Steps>
+
+### Add documents and search
+
+```python
+# Create a knowledge base
+created_kb = await kbs.acreate(name="KB Test")
+
+# Add a document from a URL; sync=True waits for processing to complete
+document_url = "https://ontheline.trincoll.edu/images/bookdown/sample-local-pdf.pdf"
+created_documents = await created_kb.aadd_documents(
+    document_urls=[document_url],
+    sync=True
+)
+
+print(f"Added {len(created_documents)} document(s)")
+print(f"Document URL: {created_documents[0].document_url}")
+
+# Semantic search
+search_results = await created_kb.asearch(search_query="Praesent")
+for result in search_results:
+    print(f"Content: {result.content[:200]}")
+    print(f"Score: {result.score}")
+```
+
+<Note>
+Pass `sync=True` to `aadd_documents()` to block until documents are fully processed and indexed before returning. Without it, indexing happens asynchronously in the background.
+</Note>
+
+### Search within an agent's knowledge bases
+
+```python
+from xpander_sdk import Agents
+
+agents = Agents()
+agent = await agents.aget(agent_id=XPANDER_AGENT_ID)
+
+# Get knowledge bases linked to the agent
+kbs = await agent.aget_knowledge_bases()
+
+# Search within the first knowledge base
+search_results = await kbs[0].asearch(search_query="David Hines", top_k=1)
+for result in search_results:
+    print(f"Content: {result.content[:100]}")
+    print(f"Score: {result.score}")
+```
+
+### Attach a knowledge base to an agent
+
+<Tabs>
+  <Tab title="By instance">
+    ```python
+    from xpander_sdk import KnowledgeBases, Agents
+
+    kb_manager = KnowledgeBases()
+    kb = await kb_manager.aget(knowledge_base_id="d8fd14c0-51e1-469e-a5bb-b470e8488eca")
+
+    agents = Agents()
+    agent = await agents.aget(agent_id=XPANDER_AGENT_ID)
+
+    # Attach using the KnowledgeBase instance
+    agent.attach_knowledge_base(knowledge_base=kb)
+    ```
+  </Tab>
+  <Tab title="By ID">
+    ```python
+    # Attach using just the ID
+    agent.attach_knowledge_base(knowledge_base_id="d8fd14c0-51e1-469e-a5bb-b470e8488eca")
+
+    # Verify attachment
+    attached_kbs = await agent.aget_knowledge_bases()
+    print(f"Agent now has {len(attached_kbs)} knowledge bases attached")
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+`attach_knowledge_base()` modifies only the runtime agent instance. Changes are not persisted to the platform unless an explicit save or sync is performed.
+</Warning>
+
+### Use the knowledge bases retriever
+
+```python
+if agent.has_knowledge_bases:
+    retriever = agent.knowledge_bases_retriever()
+
+    search_results = retriever(
+        query="pricing strategy",
+        num_documents=5
+    )
+
+    for result in search_results:
+        print(f"Document: {result['document_name']}")
+        print(f"Content: {result['content'][:100]}")
+        print(f"Score: {result['score']}")
+```
+
+### Delete a knowledge base
+
+```python
+await created_kb.adelete()
+
+# Confirm deletion
+kbs_list = await kbs.alist()
+assert not any(kb.id == created_kb.id for kb in kbs_list)
+```
+
+## API reference
+
+For full method signatures and parameter details, see:
+
+- [KnowledgeBases class](/api-reference/knowledge-bases/knowledge-bases-class)

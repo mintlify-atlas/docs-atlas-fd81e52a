@@ -1,0 +1,363 @@
+---
+title: "Task class"
+description: "API reference for the Task class — individual task management and event streaming"
+---
+
+The `Task` class represents a single task execution on the xpander.ai platform. It provides methods to load, update, stream events, manage lifecycle, and integrate with the Agno framework.
+
+## Import
+
+```python
+from xpander_sdk.modules.tasks.sub_modules.task import Task
+from xpander_sdk.modules.tasks.models.task import AgentExecutionStatus
+```
+
+---
+
+## Class methods
+
+### `aload` / `load`
+
+Load a task by its unique ID from the xpander.ai platform.
+
+```python
+# Async
+task = await Task.aload(task_id="task_123")
+print(f"Status: {task.status}")
+
+# Sync
+task = Task.load(task_id="task_123")
+```
+
+<ParamField path="task_id" type="str" required>
+  Unique identifier of the task to load.
+</ParamField>
+
+<ParamField path="configuration" type="Configuration" optional>
+  SDK configuration object. Uses default configuration from environment variables if not provided.
+</ParamField>
+
+**Returns:** `Task`
+
+---
+
+### `areport_external_task` / `report_external_task`
+
+Report the result of a task executed outside the xpander.ai platform. This submits execution details — inputs, outputs, token usage, tool usage — to the xpander.ai backend for tracking.
+
+```python
+import uuid
+from xpander_sdk.modules.tasks.sub_modules.task import Task
+from xpander_sdk.models.shared import Tokens
+
+# Basic report
+reported_task = await Task.areport_external_task(
+    agent_id="agent123",
+    id=str(uuid.uuid4()),
+    input="Process inventory data",
+    result="Successfully updated 500 inventory items"
+)
+print(f"Reported task ID: {reported_task.id}")
+print(f"Task status: {reported_task.status}")
+
+# Comprehensive report with token and tool usage
+tokens = Tokens(
+    completion_tokens=200,
+    prompt_tokens=75,
+    total_tokens=275
+)
+
+reported_task = await Task.areport_external_task(
+    agent_id="agent123",
+    id=str(uuid.uuid4()),
+    input="Generate monthly financial report",
+    llm_response={"content": "Report generated successfully", "model": "gpt-4"},
+    tokens=tokens,
+    is_success=True,
+    result="Monthly financial report generated with insights",
+    duration=8.7,
+    used_tools=["financial_analyzer", "chart_generator", "pdf_creator"]
+)
+
+# Sync version
+reported_task_sync = Task.report_external_task(
+    agent_id="agent123",
+    id=str(uuid.uuid4()),
+    input="Send weekly status update",
+    result="Status update sent to stakeholders",
+    used_tools=["email_sender", "template_engine"]
+)
+```
+
+<ParamField path="agent_id" type="str" optional>
+  Identifier of the agent associated with the task.
+</ParamField>
+
+<ParamField path="id" type="str" optional>
+  Task identifier — external or internal UUID.
+</ParamField>
+
+<ParamField path="input" type="str" optional>
+  The input parameters or prompt used in execution.
+</ParamField>
+
+<ParamField path="llm_response" type="Any" optional>
+  The raw LLM response or relevant output object.
+</ParamField>
+
+<ParamField path="tokens" type="Tokens" optional>
+  Token usage for the execution (`completion_tokens`, `prompt_tokens`, `total_tokens`).
+</ParamField>
+
+<ParamField path="is_success" type="bool" optional>
+  Whether the task execution succeeded. Defaults to `True`.
+</ParamField>
+
+<ParamField path="result" type="str" optional>
+  String representation of the final result.
+</ParamField>
+
+<ParamField path="duration" type="float" optional>
+  Execution duration in seconds. Defaults to `0`.
+</ParamField>
+
+<ParamField path="used_tools" type="List[str]" optional>
+  List of tool names used during the execution. Defaults to `[]`.
+</ParamField>
+
+<ParamField path="configuration" type="Configuration" optional>
+  SDK configuration. Uses default configuration if not provided.
+</ParamField>
+
+**Returns:** `Task`
+
+---
+
+## Instance methods
+
+### `aset_status` / `set_status`
+
+Update the task's status and persist the change to the backend.
+
+```python
+from xpander_sdk.modules.tasks.models.task import AgentExecutionStatus
+
+# Async
+await task.aset_status(AgentExecutionStatus.Completed)
+
+# Async with result
+await task.aset_status(AgentExecutionStatus.Failed, result="Quota exceeded")
+
+# Sync
+task.set_status(AgentExecutionStatus.Executing)
+```
+
+<ParamField path="status" type="AgentExecutionStatus" required>
+  The new status to apply.
+</ParamField>
+
+<ParamField path="result" type="str" optional>
+  Optional result message to store alongside the status update.
+</ParamField>
+
+---
+
+### `asave` / `save`
+
+Persist the current task state to the xpander.ai backend. Call this after mutating task properties such as `result` or `internal_status`.
+
+```python
+# Set internal status then save
+task.internal_status = "Sentiment analysis completed with 95% confidence"
+await task.asave()
+
+# Sync
+task.internal_status = "Processing complete"
+task.save()
+```
+
+---
+
+### `astop` / `stop`
+
+Stop the task, terminating its execution on the platform.
+
+```python
+# Async
+await task.astop()
+
+# Sync
+task.stop()
+```
+
+---
+
+### `aevents` / `events`
+
+Stream real-time task events via Server-Sent Events (SSE). The task must have been created with `events_streaming=True`.
+
+```python
+from xpander_sdk import Tasks
+from xpander_sdk.modules.tasks.models.task import AgentExecutionStatus
+
+# Create a streaming-enabled task
+tasks = Tasks()
+task = await tasks.acreate(
+    agent_id="agent123",
+    prompt="Analyze the sales data",
+    events_streaming=True
+)
+
+# Async streaming
+async for event in task.aevents():
+    print(f"Event type: {event.type}")
+    print(f"Event data: {event.data}")
+    # Stop iterating when the task is done
+    if hasattr(event.data, "status") and event.data.status in (
+        AgentExecutionStatus.Completed,
+        AgentExecutionStatus.Failed,
+        AgentExecutionStatus.Stopped,
+    ):
+        break
+
+# Sync streaming (for non-async environments)
+for event in task.events():
+    print(f"Event: {event}")
+```
+
+**Yields:** `TaskUpdateEvent`
+
+**Raises:** `ValueError` if the task was not created with `events_streaming=True`.
+
+---
+
+### `get_files`
+
+Get PDF files from the task input, formatted as Agno `File` objects for use with Agno agents.
+
+```python
+files = task.get_files()
+```
+
+**Returns:** `List[Any]` — Agno `File` objects when Agno is installed, or URL strings otherwise. Returns `[]` if no PDF files are present.
+
+---
+
+### `get_images`
+
+Get image files from the task input, formatted as Agno `Image` objects for use with Agno agents.
+
+```python
+images = task.get_images()
+```
+
+**Returns:** `List[Any]` — Agno `Image` objects when Agno is installed, or URL strings otherwise. Returns `[]` if no image files are present.
+
+---
+
+### `get_human_readable_files`
+
+Get text-based files (`.txt`, `.csv`, `.json`, `.py`, etc.) with their fetched content. This is called automatically by `to_message()` to include file contents in the task message.
+
+```python
+readable_files = task.get_human_readable_files()
+for file_data in readable_files:
+    print(f"File: {file_data['url']}")
+    print(f"Content: {file_data['content'][:200]}...")
+```
+
+**Returns:** `List[dict]` — Each dict has `url` and `content` keys.
+
+---
+
+### `to_message`
+
+Convert the task input into a formatted message string suitable for passing to an LLM or Agno agent. Includes the prompt text, file URLs, and the content of any human-readable files.
+
+```python
+message = task.to_message()
+print(message)
+# "Analyze the attached documents\nFiles: https://example.com/report.pdf\n..."
+```
+
+**Returns:** `str`
+
+---
+
+## Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `id` | `str` | Unique identifier for the task. |
+| `agent_id` | `str` | ID of the agent executing the task. |
+| `organization_id` | `str` | ID of the owning organization. |
+| `status` | `AgentExecutionStatus` | Current execution status. |
+| `internal_status` | `Optional[str]` | Custom status string for your own tracking (max 255 characters). Set this before calling `save()`. |
+| `input` | `AgentExecutionInput` | The input object containing `text`, `files`, and optional `user`. |
+| `result` | `Optional[str]` | Final result of the task execution. |
+| `events_streaming` | `Optional[bool]` | Whether the task was created with event streaming enabled. |
+| `created_at` | `datetime` | Timestamp when the task was created. |
+| `started_at` | `Optional[datetime]` | Timestamp when execution started. |
+| `finished_at` | `Optional[datetime]` | Timestamp when execution finished. |
+| `agent_version` | `Optional[str]` | Version of the agent used. |
+| `tokens` | `Optional[Tokens]` | Token usage metrics. |
+| `used_tools` | `Optional[List[str]]` | Tools used during execution. |
+| `duration` | `Optional[float]` | Execution duration in seconds. |
+
+---
+
+## Agno integration example
+
+```python
+import asyncio
+from xpander_sdk import Tasks, Backend
+from agno.agent import Agent
+
+async def main():
+    tasks = Tasks()
+    task = await tasks.acreate(
+        agent_id="agent123",
+        prompt="Analyze the attached documents and images",
+        file_urls=[
+            "https://example.com/report.pdf",
+            "https://example.com/chart.png",
+            "https://example.com/data.csv",
+        ]
+    )
+
+    # Categorized file accessors
+    files = task.get_files()    # Agno File objects for PDFs
+    images = task.get_images()  # Agno Image objects for images
+
+    backend = Backend()
+    agno_agent = Agent(**backend.get_args())
+
+    result = await agno_agent.arun(
+        input=task.to_message(),  # text + file URLs + readable file content
+        files=files,
+        images=images
+    )
+    print(f"Result: {result.content}")
+
+asyncio.run(main())
+```
+
+---
+
+## Internal status tracking
+
+The `internal_status` field lets you store a custom status string alongside the platform status. It has a maximum length of 255 characters and is persisted when `save()` or `asave()` is called.
+
+```python
+task = await tasks.acreate(
+    agent_id="agent123",
+    prompt="Analyze customer feedback"
+)
+
+# Set custom internal status before saving
+task.internal_status = "Sentiment analysis completed with 95% confidence"
+await task.asave()
+
+print(f"Platform status: {task.status}")       # e.g., AgentExecutionStatus.Executing
+print(f"Internal status: {task.internal_status}")  # "Sentiment analysis completed..."
+```

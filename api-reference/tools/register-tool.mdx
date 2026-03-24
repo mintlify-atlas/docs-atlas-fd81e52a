@@ -1,0 +1,153 @@
+---
+title: "@register_tool decorator"
+description: "Register Python functions as tools for xpander.ai agents"
+---
+
+The `@register_tool` decorator converts a Python function into a tool that is available in the `ToolsRepository` and can be invoked by xpander.ai agents. The decorated function continues to work as a normal Python function.
+
+## Import
+
+```python
+from xpander_sdk import register_tool
+```
+
+## Usage
+
+<Tabs>
+  <Tab title="Simple">
+    Apply directly to a function without parentheses:
+
+    ```python
+    @register_tool
+    def check_weather(location: str) -> str:
+        """Get weather information for a location."""
+        return f"Weather in {location}: Sunny, 25°C"
+    ```
+  </Tab>
+  <Tab title="With options">
+    Call with parentheses to pass keyword arguments:
+
+    ```python
+    @register_tool(add_to_graph=True)
+    async def fetch_external_data(api_endpoint: str, headers: dict = None) -> dict:
+        """Fetch data from an external API."""
+        return {"data": "fetched from API", "endpoint": api_endpoint}
+    ```
+  </Tab>
+</Tabs>
+
+## Parameters
+
+<ParamField body="add_to_graph" type="bool" optional>
+  When `True`, the tool is marked for synchronization with the agent's execution graph on the xpander.ai platform. Defaults to `False`.
+
+  Use this when you want the tool to be persisted and available to the agent across sessions, not just the current runtime.
+</ParamField>
+
+## Behavior
+
+| Aspect | Behavior |
+|--------|----------|
+| **Tool name** | Derived from the function name (`func.__name__`) |
+| **Tool description** | Extracted from the function's docstring |
+| **Schema** | Generated from Python type hints using Pydantic |
+| **Sync/Async** | Both synchronous and asynchronous functions are supported |
+| **Function unchanged** | The decorated function remains callable normally |
+
+The decorator creates a `Tool` object and calls `ToolsRepository.register_tool()` to add it to the global registry. All `ToolsRepository` instances share this registry.
+
+## Examples
+
+### Simple tool registration
+
+```python
+from xpander_sdk import register_tool
+
+@register_tool
+def check_weather(location: str) -> str:
+    """Get weather information for a location."""
+    return f"Weather in {location}: Sunny, 25°C"
+```
+
+### Tool with complex parameters and defaults
+
+```python
+@register_tool
+def analyze_data(
+    data_sources: list,
+    analysis_type: str,
+    include_charts: bool = False
+) -> dict:
+    """Analyze data from specified sources."""
+    return {
+        "sources_analyzed": len(data_sources),
+        "analysis_type": analysis_type,
+        "charts_included": include_charts,
+        "status": "completed"
+    }
+```
+
+### Async tool with graph synchronization
+
+```python
+@register_tool(add_to_graph=True)
+async def fetch_external_data(api_endpoint: str, headers: dict = None) -> dict:
+    """Fetch data from an external API."""
+    # Implementation here
+    return {"data": "fetched from API", "endpoint": api_endpoint}
+```
+
+### Database integration
+
+```python
+import psycopg
+from xpander_sdk import register_tool
+
+@register_tool
+async def query_database(query: str, params: list = None) -> list:
+    """Execute a database query and return results."""
+    conn = await psycopg.AsyncConnection.connect("postgresql://...")
+    try:
+        async with conn.cursor() as cur:
+            await cur.execute(query, params or [])
+            rows = await cur.fetchall()
+            return [list(row) for row in rows]
+    finally:
+        await conn.close()
+```
+
+### API endpoint tool
+
+```python
+from xpander_sdk import register_tool
+
+@register_tool
+def call_api_endpoint(endpoint: str, method: str = "GET") -> dict:
+    """Call an internal API endpoint."""
+    # Implementation here
+    return {"status": "success", "endpoint": endpoint}
+```
+
+### Retrieving the registered tool
+
+```python
+from xpander_sdk import ToolsRepository
+
+# The function is registered automatically at decoration time
+@register_tool
+def calculate_sum(a: int, b: int) -> int:
+    """Calculate the sum of two numbers."""
+    return a + b
+
+# The function itself is still callable
+result = calculate_sum(5, 3)  # Returns 8
+
+# And also accessible as a Tool
+tools = ToolsRepository()
+tool = tools.get_tool_by_id("calculate_sum")
+print(tool.description)  # "Calculate the sum of two numbers."
+```
+
+<Tip>
+  Type hints are required for schema generation. Always annotate your function parameters — the SDK uses them to build the Pydantic validation model that the agent uses when invoking your tool.
+</Tip>

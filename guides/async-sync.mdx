@@ -1,0 +1,159 @@
+---
+title: "Async and sync APIs"
+description: "Every xpander SDK method is available in both async and sync flavors"
+---
+
+Every operation in the xpander SDK ships in two flavors: an **async** variant (recommended for production) and a **sync** variant (convenient for scripts and notebooks). Both flavors are always available — you never need to install anything extra to use either one.
+
+## Naming convention
+
+Async methods are prefixed with the letter `a`. The table below shows the most commonly used pairs:
+
+| Sync | Async | Operation |
+|---|---|---|
+| `agents.list()` | `agents.alist()` | List all agents |
+| `agents.get(agent_id)` | `agents.aget(agent_id)` | Load a single agent |
+| `Agent.load(agent_id)` | `Agent.aload(agent_id)` | Load agent (class method) |
+| `agent.create_task(...)` | `agent.acreate_task(...)` | Create a task |
+| `task.set_status(status)` | `task.aset_status(status)` | Change task status |
+| `task.save()` | `task.asave()` | Persist task changes |
+| `task.stop()` | `task.astop()` | Stop a task |
+| `task.events()` | `task.aevents()` | Stream task events |
+| `agent.invoke_tool(...)` | `agent.ainvoke_tool(...)` | Invoke a tool |
+| `agent.get_knowledge_bases()` | `agent.aget_knowledge_bases()` | Get knowledge bases |
+| `backend.get_args(...)` | `backend.aget_args(...)` | Get runtime agent args |
+
+## Usage examples
+
+<Tabs>
+  <Tab title="Async (recommended)">
+    ```python
+    import asyncio
+    from xpander_sdk import Agents, Configuration
+
+    async def main():
+        config = Configuration(
+            api_key="your-api-key",
+            organization_id="your-org-id"
+        )
+        agents = Agents(configuration=config)
+
+        # List all agents
+        agent_list = await agents.alist()
+
+        # Load a specific agent
+        agent = await agents.aget("agent-id")
+
+        # Create and execute a task
+        task = await agent.acreate_task(
+            prompt="Help me analyze this data",
+            file_urls=["https://example.com/data.csv"]
+        )
+        print(f"Task created: {task.id}")
+
+    asyncio.run(main())
+    ```
+  </Tab>
+  <Tab title="Sync (scripts)">
+    ```python
+    from xpander_sdk import Agents, Configuration
+
+    config = Configuration(
+        api_key="your-api-key",
+        organization_id="your-org-id"
+    )
+    agents = Agents(configuration=config)
+
+    # List all agents
+    agent_list = agents.list()
+
+    # Load a specific agent
+    agent = agents.get("agent-id")
+
+    # Create and execute a task
+    task = agent.create_task(
+        prompt="Help me analyze this data",
+        file_urls=["https://example.com/data.csv"]
+    )
+    print(f"Task created: {task.id}")
+    ```
+  </Tab>
+</Tabs>
+
+## Async pattern with asyncio.run()
+
+For standalone scripts, wrap your async entry point with `asyncio.run()`:
+
+```python
+import asyncio
+from xpander_sdk import Agent
+
+async def main():
+    agent = await Agent.aload("agent-id")
+    task = await agent.acreate_task(prompt="input data")
+    print(f"Status: {task.status}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Sync pattern for scripts and notebooks
+
+Sync methods call `asyncio.run()` internally, so you can use them directly without any boilerplate:
+
+```python
+from xpander_sdk import Agent
+
+agent = Agent.load("agent-id")
+task = agent.create_task(prompt="input data")
+print(f"Status: {task.status}")
+```
+
+<Note>
+Sync methods block the calling thread until the operation completes. In a web server or async framework like FastAPI, always use the `a`-prefixed async methods to avoid blocking the event loop.
+</Note>
+
+## Jupyter and nest-asyncio
+
+Jupyter notebooks run their own event loop, which prevents `asyncio.run()` from working directly. Install `nest_asyncio` to patch the running loop and use async methods:
+
+```bash
+pip install nest_asyncio
+```
+
+```python
+import nest_asyncio
+nest_asyncio.apply()
+
+import asyncio
+from xpander_sdk import Agent
+
+# Now asyncio.run() works inside a notebook cell
+async def run():
+    agent = await Agent.aload("agent-id")
+    task = await agent.acreate_task(prompt="Analyze Q4 data")
+    print(task.id)
+
+asyncio.run(run())
+```
+
+Alternatively, Jupyter lets you `await` top-level coroutines directly in cells (Python 3.10+):
+
+```python
+from xpander_sdk import Agent
+
+agent = await Agent.aload("agent-id")
+task = await agent.acreate_task(prompt="Analyze Q4 data")
+print(task.id)
+```
+
+## Which to use
+
+<CardGroup cols={2}>
+  <Card title="Use async in production" icon="bolt">
+    Async methods release the event loop while waiting for I/O, enabling concurrent requests and better throughput. Prefer them in FastAPI, Django async views, and long-running agent services.
+  </Card>
+  <Card title="Use sync for quick scripts" icon="terminal">
+    Sync methods require no extra setup. They are ideal for one-off scripts, CLIs, data pipelines, and anywhere you do not already have an async event loop.
+  </Card>
+</CardGroup>

@@ -1,0 +1,96 @@
+---
+title: "Self-hosted configuration"
+description: "Configure the SDK for on-premise xpander.ai deployments"
+---
+
+xpander.ai can be deployed on-premise using the Agent Controller. When running a self-hosted deployment, you configure the SDK to point to your Agent Controller endpoint instead of the default cloud URL.
+
+## Agent Controller endpoint
+
+The Agent Controller is the on-premise component that handles agent management and API routing. Its URL follows the pattern:
+
+```
+https://agent-controller.{your-domain}
+```
+
+For example: `https://agent-controller.internal.example.com`
+
+## API key difference
+
+| Deployment | API key source |
+|------------|----------------|
+| **xpander Cloud** | Your xpander.ai cloud API key (from the cloud dashboard) |
+| **Self-hosted** | The API key configured on your Agent Controller instance |
+
+The same `api_key` field is used in both cases — you simply supply the appropriate key for your deployment.
+
+## Configuration
+
+Set `base_url` to your Agent Controller endpoint:
+
+```python
+from xpander_sdk import Configuration
+
+config = Configuration(
+    api_key="your-agent-controller-api-key",
+    organization_id="your-organization-id",
+    base_url="https://agent-controller.internal.example.com"
+)
+```
+
+The `organization_id` is automatically appended to the base URL path when the SDK detects an Agent Controller endpoint (i.e., when `base_url` contains `"agent-controller"`). You do not need to include it manually.
+
+```python
+config.get_full_url()
+# -> 'https://agent-controller.internal.example.com/your-organization-id'
+```
+
+## Environment variables
+
+You can also configure the Agent Controller via environment variables:
+
+```bash
+export XPANDER_API_KEY="your-agent-controller-api-key"
+export XPANDER_ORGANIZATION_ID="your-organization-id"
+export XPANDER_BASE_URL="https://agent-controller.internal.example.com"
+```
+
+Then instantiate `Configuration` with no arguments:
+
+```python
+from xpander_sdk import Configuration
+
+config = Configuration()  # Reads XPANDER_BASE_URL automatically
+```
+
+## Complete self-hosted example
+
+```python
+from xpander_sdk import Configuration, Agents, Backend, on_task
+
+# Point the SDK at your Agent Controller
+config = Configuration(
+    api_key="your-agent-controller-api-key",
+    organization_id="your-organization-id",
+    base_url="https://agent-controller.internal.example.com"
+)
+
+# All modules use this configuration
+agents = Agents(configuration=config)
+backend = Backend(configuration=config)
+
+@on_task(configuration=config)
+async def handle_task(task):
+    args = await backend.aget_args(
+        agent_id=task.agent_id,
+        task=task
+    )
+    # agno_agent = Agent(**args)
+    # result = await agno_agent.arun(message=task.to_message())
+    task.result = "Processed on self-hosted deployment"
+    return task
+```
+
+<Note>
+  Local development using port-forwarding is also supported. If your Agent Controller is accessible on a local port (e.g., `http://localhost:9016`), set `XPANDER_BASE_URL=http://localhost:9016`. The SDK detects the `9016` port and applies the same organization ID path appending logic as it does for `agent-controller` hostnames.
+</Note>

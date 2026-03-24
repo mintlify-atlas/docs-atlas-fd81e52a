@@ -1,0 +1,193 @@
+---
+title: "ToolsRepository class"
+description: "Manage and access agent tools — local and remote"
+---
+
+The `ToolsRepository` class is the central registry for all tools available to an agent. It merges backend-managed tools with locally registered tools (via `@register_tool`) and exposes them through a unified interface.
+
+## Import
+
+```python
+from xpander_sdk import ToolsRepository
+```
+
+## Constructor
+
+```python
+ToolsRepository(
+    configuration: Optional[Configuration] = Configuration(),
+    tools: List[Tool] = [],
+    is_async: Optional[bool] = True
+)
+```
+
+<ParamField body="configuration" type="Configuration" optional>
+  SDK configuration object. Defaults to an auto-detected configuration from environment variables.
+</ParamField>
+
+<ParamField body="tools" type="List[Tool]" optional>
+  Backend-managed tools. Typically populated automatically when loading an agent.
+</ParamField>
+
+<ParamField body="is_async" type="bool" optional>
+  When `True`, the `functions` property returns async callables. Defaults to `True`.
+</ParamField>
+
+## Properties
+
+### `list` → `List[Tool]`
+
+Returns all available tools, merging backend-managed tools and locally registered tools. Deduplication is performed by tool ID — backend tools take precedence over local tools with the same ID.
+
+Configuration is automatically set on each tool before returning.
+
+```python
+tools_repo = ToolsRepository(configuration=config)
+
+for tool in tools_repo.list:
+    print(f"{tool.name}: {tool.description}")
+```
+
+### `functions` → `List[Callable]`
+
+Returns a list of normalized callable functions — one per tool — each accepting a single `payload` parameter typed as the tool's Pydantic schema. These are suitable for passing directly to LLM framework tool registries.
+
+When `is_async=True` (default), returns async functions. When `is_async=False`, returns synchronous blocking functions.
+
+```python
+# Pass directly to an LLM framework
+functions = tools_repo.functions
+```
+
+## Methods
+
+### `get_tool_by_id`
+
+```python
+def get_tool_by_id(tool_id: str) -> Optional[Tool]
+```
+
+Retrieve a single tool by its unique identifier from the combined tool list.
+
+<ParamField body="tool_id" type="str" required>
+  The unique identifier of the tool to retrieve.
+</ParamField>
+
+Returns the matching `Tool` instance, or `None` if not found.
+
+```python
+weather_tool = tools_repo.get_tool_by_id("check_weather")
+if weather_tool:
+    result = await weather_tool.ainvoke(agent_id="agent-123", payload={"location": "New York"})
+```
+
+### `register_tool` (class method)
+
+```python
+@classmethod
+def register_tool(cls, tool: Tool) -> None
+```
+
+Register a local tool into the global class-level registry. All `ToolsRepository` instances share this registry.
+
+<Note>
+  The `@register_tool` decorator calls this method automatically. You only need to call it directly when constructing `Tool` objects manually.
+</Note>
+
+<ParamField body="tool" type="Tool" required>
+  The `Tool` instance to register.
+</ParamField>
+
+```python
+from xpander_sdk.modules.tools_repository.sub_modules.tool import Tool
+
+tool = Tool(
+    id="my_tool",
+    name="my_tool",
+    description="Does something useful",
+    method="POST",
+    path="/tools/my_tool",
+    is_local=True,
+    fn=my_function
+)
+ToolsRepository.register_tool(tool)
+```
+
+### `should_sync_local_tools`
+
+```python
+def should_sync_local_tools() -> bool
+```
+
+Returns `True` if any locally registered tool is marked with `add_to_graph=True` and has not yet been synced with the xpander.ai backend.
+
+```python
+if tools_repo.should_sync_local_tools():
+    local_tools = tools_repo.get_local_tools_for_sync()
+    print(f"Found {len(local_tools)} tools pending sync")
+```
+
+### `get_local_tools_for_sync`
+
+```python
+def get_local_tools_for_sync() -> List[Tool]
+```
+
+Returns the list of locally registered tools that are marked for graph addition (`add_to_graph=True`) and have not yet been synced with the backend.
+
+```python
+local_tools = tools_repo.get_local_tools_for_sync()
+for tool in local_tools:
+    print(f"Pending sync: {tool.name}")
+```
+
+## Examples
+
+### List and invoke tools
+
+```python
+from xpander_sdk import ToolsRepository, Configuration
+
+config = Configuration(
+    api_key="your-api-key",
+    organization_id="your-org-id"
+)
+tools_repo = ToolsRepository(configuration=config)
+
+# List all available tools
+for tool in tools_repo.list:
+    print(f"Tool: {tool.name} - {tool.description}")
+
+# Get a specific tool
+weather_tool = tools_repo.get_tool_by_id("check_weather")
+
+# Invoke asynchronously
+result = await weather_tool.ainvoke(
+    agent_id="agent-123",
+    payload={"location": "New York"}
+)
+print(f"Result: {result.result}")
+```
+
+### Check and handle tool sync
+
+```python
+if tools_repo.should_sync_local_tools():
+    local_tools = tools_repo.get_local_tools_for_sync()
+    print(f"Found {len(local_tools)} tools to sync")
+
+    for tool in local_tools:
+        print(f"Syncing tool: {tool.name}")
+        # Synchronization is handled automatically by the platform
+```
+
+### Use functions with an LLM framework
+
+```python
+# Retrieve callable functions for LLM tool use
+functions = tools_repo.functions
+
+# Each function has the tool's name, description, and Pydantic-typed payload parameter
+for fn in functions:
+    print(f"{fn.__name__}: {fn.__doc__[:80]}")
+```

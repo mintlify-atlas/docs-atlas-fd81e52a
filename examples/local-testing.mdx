@@ -1,0 +1,205 @@
+---
+title: "Local task testing"
+description: "Test your @on_task handlers locally without connecting to the xpander platform"
+---
+
+The `LocalTaskTest` model lets you define a synthetic task and pass it directly to your `@on_task` handler. The handler runs exactly as it would in production, but the task is never sent to the xpander platform task queue — making local iteration fast and self-contained.
+
+## How it works
+
+When you pass a `LocalTaskTest` to `@on_task` via the `test_task` parameter, the decorator bypasses the real event listener and immediately calls your handler with the synthetic task data. No API key, no network connection, and no active agent is required for the handler itself to execute.
+
+## Required imports
+
+```python
+from xpander_sdk.modules.tasks.models.task import LocalTaskTest, AgentExecutionInput
+from xpander_sdk.models.shared import OutputFormat
+from xpander_sdk import on_task
+```
+
+| Class | Module | Description |
+|-------|--------|-------------|
+| `LocalTaskTest` | `xpander_sdk.modules.tasks.models.task` | Wraps the test input and desired output format |
+| `AgentExecutionInput` | `xpander_sdk.modules.tasks.models.task` | Holds the text prompt (and optional file URLs) |
+| `OutputFormat` | `xpander_sdk.models.shared` | Enum: `Text`, `Markdown`, `Json`, `Voice` |
+
+## `LocalTaskTest` model
+
+```python
+class LocalTaskTest(BaseModel):
+    input: AgentExecutionInput          # Required: the task prompt
+    agent_version: Optional[str] = None # Pin to a specific agent version
+    output_format: Optional[OutputFormat] = None
+    output_schema: Optional[Dict] = None
+```
+
+## Setting up local testing
+
+<Steps>
+  <Step title="Define a LocalTaskTest">
+    Create a `LocalTaskTest` with the text prompt your handler should receive:
+
+    ```python
+    from xpander_sdk.modules.tasks.models.task import LocalTaskTest, AgentExecutionInput
+    from xpander_sdk.models.shared import OutputFormat
+
+    local_task = LocalTaskTest(
+        input=AgentExecutionInput(text="What can you do?"),
+        output_format=OutputFormat.Json,
+        output_schema={"capabilities": "list of capabilities"}
+    )
+    ```
+  </Step>
+
+  <Step title="Pass it to @on_task">
+    Supply the `LocalTaskTest` via the `test_task` keyword argument:
+
+    ```python
+    from xpander_sdk import on_task
+
+    @on_task(test_task=local_task)
+    async def handle_test_task(task):
+        task.result = {
+            "capabilities": [
+                "Data analysis",
+                "Text processing",
+                "API integration"
+            ]
+        }
+        return task
+    ```
+  </Step>
+
+  <Step title="Run your script">
+    Execute the file normally. The handler is called immediately with the synthetic task:
+
+    ```bash
+    python my_agent.py
+    ```
+  </Step>
+</Steps>
+
+## Output format examples
+
+The `output_format` field accepts any value from the `OutputFormat` enum. The examples below show how to configure the test task for each format.
+
+<Tabs>
+  <Tab title="JSON output">
+    Use `OutputFormat.Json` when your handler returns structured data. Pair it with `output_schema` to describe the expected shape.
+
+    ```python
+    from xpander_sdk.modules.tasks.models.task import LocalTaskTest, AgentExecutionInput
+    from xpander_sdk.models.shared import OutputFormat
+    from xpander_sdk import on_task
+
+    local_task = LocalTaskTest(
+        input=AgentExecutionInput(text="What can you do?"),
+        output_format=OutputFormat.Json,
+        output_schema={"capabilities": "list of capabilities"}
+    )
+
+    @on_task(test_task=local_task)
+    async def handle_test_task(task):
+        task.result = {
+            "capabilities": [
+                "Data analysis",
+                "Text processing",
+                "API integration"
+            ]
+        }
+        return task
+    ```
+  </Tab>
+
+  <Tab title="Markdown output">
+    Use `OutputFormat.Markdown` when the handler produces rich text intended for display in a UI.
+
+    ```python
+    from xpander_sdk.modules.tasks.models.task import LocalTaskTest, AgentExecutionInput
+    from xpander_sdk.models.shared import OutputFormat
+    from xpander_sdk import on_task
+
+    local_task = LocalTaskTest(
+        input=AgentExecutionInput(text="Summarize the quarterly results"),
+        output_format=OutputFormat.Markdown,
+    )
+
+    @on_task(test_task=local_task)
+    async def handle_markdown_task(task):
+        task.result = "## Q3 Results\n\n- Revenue up 12%\n- Costs down 4%"
+        return task
+    ```
+  </Tab>
+
+  <Tab title="Plain text output">
+    Use `OutputFormat.Text` for simple string responses with no formatting.
+
+    ```python
+    from xpander_sdk.modules.tasks.models.task import LocalTaskTest, AgentExecutionInput
+    from xpander_sdk.models.shared import OutputFormat
+    from xpander_sdk import on_task
+
+    local_task = LocalTaskTest(
+        input=AgentExecutionInput(text="Say hello"),
+        output_format=OutputFormat.Text,
+    )
+
+    @on_task(test_task=local_task)
+    async def handle_text_task(task):
+        task.result = "Hello! I am your xpander agent."
+        return task
+    ```
+  </Tab>
+</Tabs>
+
+## Complete example
+
+The snippet below is a self-contained script that defines a local test, runs the handler, and prints the result — no platform connection required.
+
+```python
+from xpander_sdk.modules.tasks.models.task import LocalTaskTest, AgentExecutionInput
+from xpander_sdk.models.shared import OutputFormat
+from xpander_sdk import on_task
+
+# Define the synthetic task
+local_task = LocalTaskTest(
+    input=AgentExecutionInput(text="What can you do?"),
+    output_format=OutputFormat.Json,
+    output_schema={"capabilities": "list of capabilities"}
+)
+
+
+@on_task(test_task=local_task)
+async def handle_test_task(task):
+    # Access the prompt via task.input.text
+    print(f"Running task: {task.input.text}")
+
+    task.result = {
+        "capabilities": [
+            "Data analysis",
+            "Text processing",
+            "API integration"
+        ]
+    }
+    return task
+```
+
+<Note>
+Local testing does not connect to the xpander platform. The handler receives a fully constructed `Task` object, so all task properties (`task.input.text`, `task.output_format`, etc.) are available exactly as they would be in production.
+</Note>
+
+## What is and isn't bypassed
+
+| Feature | Local test | Production |
+|---------|-----------|------------|
+| `@on_task` handler called | Yes | Yes |
+| Task sent to platform queue | No | Yes |
+| Real agent ID required | No | Yes |
+| API key / network required | No | Yes |
+| `task.input.text` populated | Yes | Yes |
+| `task.output_format` respected | Yes | Yes |
+| Tool calls executed remotely | No | Yes |
+
+<Warning>
+Tool calls made inside the handler during local testing will attempt real network calls if your environment has credentials set. Mock any external tool calls if you want a fully offline test.
+</Warning>

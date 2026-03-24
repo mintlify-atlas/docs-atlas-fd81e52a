@@ -1,0 +1,304 @@
+---
+title: "Tool hook decorators"
+description: "@on_tool_before, @on_tool_after, and @on_tool_error"
+---
+
+Tool hooks let you intercept tool invocations at each stage of their lifecycle without modifying the tool implementations. They are useful for cross-cutting concerns like logging, monitoring, validation, and alerting.
+
+## Import
+
+```python
+from xpander_sdk import on_tool_before, on_tool_after, on_tool_error
+```
+
+## Overview
+
+| Decorator | When it runs |
+|-----------|-------------|
+| `@on_tool_before` | Before the tool's payload is validated and the tool function is called |
+| `@on_tool_after` | After a **successful** tool invocation |
+| `@on_tool_error` | When the tool invocation **raises an exception** |
+
+All three decorators support both synchronous and asynchronous hook functions. Multiple hooks of the same type can be registered — they execute in registration order.
+
+<Note>
+  Hook failures are caught and logged but do **not** prevent tool execution. A failing `@on_tool_before` hook will not block the tool from running.
+</Note>
+
+## Execution flow
+
+```
+Tool.ainvoke() called
+       ↓
+Execute all @on_tool_before hooks
+       ↓
+Validate payload against schema
+       ↓
+Execute tool (local or remote)
+       ↓
+  Success? ───No──► Execute all @on_tool_error hooks
+       ↓                          ↓
+      Yes                    Return result
+       ↓
+Execute all @on_tool_after hooks
+       ↓
+   Return result
+```
+
+## `@on_tool_before`
+
+Called before the tool is invoked. Receives the full invocation context.
+
+```python
+from typing import Optional, Dict, Any
+from xpander_sdk import on_tool_before, Tool
+
+@on_tool_before
+def hook(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None
+):
+    pass
+```
+
+<ParamField body="tool" type="Tool">
+  The `Tool` object being invoked. Access `tool.name`, `tool.id`, `tool.is_local`, etc.
+</ParamField>
+
+<ParamField body="payload" type="Any">
+  The input payload being sent to the tool.
+</ParamField>
+
+<ParamField body="payload_extension" type="Dict[str, Any]" optional>
+  Additional payload data to be merged into the main payload.
+</ParamField>
+
+<ParamField body="tool_call_id" type="str" optional>
+  Unique identifier for this tool call. Useful for correlating before/after/error hooks.
+</ParamField>
+
+<ParamField body="agent_version" type="str" optional>
+  The version of the agent making the call.
+</ParamField>
+
+## `@on_tool_after`
+
+Called after a successful tool invocation. Receives the same context as `@on_tool_before` plus the result.
+
+```python
+from typing import Optional, Dict, Any
+from xpander_sdk import on_tool_after, Tool
+
+@on_tool_after
+def hook(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    result: Any = None
+):
+    pass
+```
+
+<ParamField body="result" type="Any">
+  The result returned by the tool invocation.
+</ParamField>
+
+## `@on_tool_error`
+
+Called when the tool invocation raises an exception. Receives the same context as `@on_tool_before` plus the exception.
+
+```python
+from typing import Optional, Dict, Any
+from xpander_sdk import on_tool_error, Tool
+
+@on_tool_error
+def hook(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    error: Optional[Exception] = None
+):
+    pass
+```
+
+<ParamField body="error" type="Exception">
+  The exception that was raised during tool invocation.
+</ParamField>
+
+## Examples
+
+### Simple logging
+
+```python
+from typing import Optional, Dict, Any
+from xpander_sdk import on_tool_before, on_tool_after, on_tool_error, Tool
+from loguru import logger
+
+@on_tool_before
+def log_invocation(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None
+):
+    logger.info(f"Invoking tool: {tool.name} (call_id={tool_call_id})")
+
+@on_tool_after
+def log_success(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    result: Any = None
+):
+    logger.info(f"Tool {tool.name} succeeded")
+
+@on_tool_error
+def log_failure(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    error: Optional[Exception] = None
+):
+    logger.error(f"Tool {tool.name} failed: {error}")
+```
+
+### Execution timing
+
+```python
+import time
+from typing import Optional, Dict, Any
+from collections import defaultdict
+from xpander_sdk import on_tool_before, on_tool_after, Tool
+from loguru import logger
+
+execution_times = defaultdict(dict)
+
+@on_tool_before
+def record_start(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None
+):
+    if tool_call_id:
+        execution_times[tool_call_id] = {"start": time.time(), "tool": tool.name}
+
+@on_tool_after
+def record_duration(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    result: Any = None
+):
+    if tool_call_id and tool_call_id in execution_times:
+        duration = time.time() - execution_times[tool_call_id]["start"]
+        logger.info(f"Tool {tool.name} completed in {duration:.2f}s")
+```
+
+### Async hooks
+
+Both sync and async hooks are supported:
+
+```python
+from typing import Optional, Dict, Any
+from xpander_sdk import on_tool_before, on_tool_after, Tool
+
+@on_tool_before
+async def async_validation(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None
+):
+    await validate_payload_async(payload)
+
+@on_tool_after
+async def async_metrics(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    result: Any = None
+):
+    await metrics_service.record(tool.name, result)
+```
+
+### Critical tool error alerting
+
+```python
+from typing import Optional, Dict, Any
+from xpander_sdk import on_tool_error, Tool
+
+CRITICAL_TOOLS = {"payment_processor", "auth_service"}
+
+@on_tool_error
+async def alert_on_critical_failure(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    error: Optional[Exception] = None
+):
+    if tool.name in CRITICAL_TOOLS:
+        await alert_service.send(
+            title=f"Critical Tool Failure: {tool.name}",
+            message=f"Error: {str(error)}\nCall ID: {tool_call_id}",
+            severity="critical"
+        )
+```
+
+### Multiple hooks of the same type
+
+Hooks of the same type execute in registration order:
+
+```python
+@on_tool_before
+def first_hook(tool, payload, **kwargs):
+    print("First before hook")
+
+@on_tool_before
+def second_hook(tool, payload, **kwargs):
+    print("Second before hook")
+# Both run, in this order
+```
+
+### Integration with `@on_task`
+
+Tool hooks apply automatically to any tool invoked within an `@on_task` handler:
+
+```python
+from xpander_sdk import on_tool_before, on_task
+
+@on_tool_before
+def log_tool(tool, payload, **kwargs):
+    print(f"Tool called: {tool.name}")
+
+@on_task
+async def handle_task(task):
+    # Hooks fire automatically for every tool invocation here
+    result = await tool.ainvoke(agent_id=task.agent_id, payload={"query": "hello"})
+    task.result = result.result
+    return task
+```
+
+<Tip>
+  Register your hooks at module level (outside of functions) to ensure they are active before any tool invocations occur.
+</Tip>

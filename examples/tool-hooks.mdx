@@ -1,0 +1,413 @@
+---
+title: "Tool hooks example"
+description: "Use @on_tool_before, @on_tool_after, and @on_tool_error to intercept tool calls"
+---
+
+Tool hooks let you register functions that run automatically at each stage of a tool's lifecycle — before invocation, after success, and on failure. They are ideal for logging, performance monitoring, input validation, and error recovery without modifying tool code.
+
+## Hook execution flow
+
+When `tool.ainvoke()` is called, hooks execute in this order:
+
+```
+tool.ainvoke() called
+    ↓
+@on_tool_before hooks (in registration order)
+    ↓
+Payload validated against schema
+    ↓
+Tool executes (local or remote)
+    ↓
+Success? ──No──→ @on_tool_error hooks
+    ↓                     ↓
+   Yes              Return result
+    ↓
+@on_tool_after hooks
+    ↓
+Return result
+```
+
+<Note>
+Hook failures are logged but do not interrupt tool execution. You can register multiple hooks of the same type — they run in registration order.
+</Note>
+
+## Hook signatures
+
+Each hook type receives a consistent set of parameters. The only difference is the extra keyword argument for `@on_tool_after` (`result`) and `@on_tool_error` (`error`).
+
+<Tabs>
+  <Tab title="@on_tool_before">
+    Called immediately before the tool payload is validated and the tool is invoked.
+
+    ```python
+    from typing import Optional, Dict, Any
+    from xpander_sdk import on_tool_before, Tool
+
+    @on_tool_before
+    def hook(
+        tool: Tool,
+        payload: Any,
+        payload_extension: Optional[Dict[str, Any]] = None,
+        tool_call_id: Optional[str] = None,
+        agent_version: Optional[str] = None
+    ):
+        """Called before tool invocation"""
+    ```
+
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `tool` | `Tool` | The tool object about to be invoked |
+    | `payload` | `Any` | The input data passed to the tool |
+    | `payload_extension` | `Optional[Dict]` | Extra payload data attached to the call |
+    | `tool_call_id` | `Optional[str]` | Unique identifier for this tool call |
+    | `agent_version` | `Optional[str]` | Version of the agent making the call |
+  </Tab>
+
+  <Tab title="@on_tool_after">
+    Called after the tool completes successfully. Receives the same parameters as `@on_tool_before` plus the tool's return value.
+
+    ```python
+    from typing import Optional, Dict, Any
+    from xpander_sdk import on_tool_after, Tool
+
+    @on_tool_after
+    def hook(
+        tool: Tool,
+        payload: Any,
+        payload_extension: Optional[Dict[str, Any]] = None,
+        tool_call_id: Optional[str] = None,
+        agent_version: Optional[str] = None,
+        result: Any = None
+    ):
+        """Called after successful tool invocation"""
+    ```
+
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `tool` | `Tool` | The tool object that was invoked |
+    | `payload` | `Any` | The input data that was passed |
+    | `payload_extension` | `Optional[Dict]` | Extra payload data |
+    | `tool_call_id` | `Optional[str]` | Unique identifier for this tool call |
+    | `agent_version` | `Optional[str]` | Version of the agent |
+    | `result` | `Any` | The value returned by the tool |
+  </Tab>
+
+  <Tab title="@on_tool_error">
+    Called when the tool raises an exception. Receives the same parameters as `@on_tool_before` plus the raised exception.
+
+    ```python
+    from typing import Optional, Dict, Any
+    from xpander_sdk import on_tool_error, Tool
+
+    @on_tool_error
+    def hook(
+        tool: Tool,
+        payload: Any,
+        payload_extension: Optional[Dict[str, Any]] = None,
+        tool_call_id: Optional[str] = None,
+        agent_version: Optional[str] = None,
+        error: Optional[Exception] = None
+    ):
+        """Called when tool invocation fails"""
+    ```
+
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `tool` | `Tool` | The tool object that failed |
+    | `payload` | `Any` | The input data that caused the failure |
+    | `payload_extension` | `Optional[Dict]` | Extra payload data |
+    | `tool_call_id` | `Optional[str]` | Unique identifier for this tool call |
+    | `agent_version` | `Optional[str]` | Version of the agent |
+    | `error` | `Optional[Exception]` | The exception raised by the tool |
+  </Tab>
+</Tabs>
+
+<Note>
+All three decorators support both `async def` and regular `def` functions. The SDK wraps sync hooks automatically.
+</Note>
+
+## Examples
+
+### Logging hooks
+
+The simplest use case is logging tool lifecycle events. The example below registers two hooks per type — one async and one sync — to demonstrate that both styles work.
+
+```python
+from typing import Optional, Dict, Any
+from xpander_sdk import on_tool_before, on_tool_after, on_tool_error, Tool
+from loguru import logger
+
+
+@on_tool_before
+async def log_tool_start(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None
+):
+    """Log when a tool is about to be invoked."""
+    logger.info(f"[BEFORE] Invoking tool: {tool.name} (ID: {tool.id})")
+    logger.info(f"[BEFORE] Tool call ID: {tool_call_id}")
+    logger.info(f"[BEFORE] Agent version: {agent_version}")
+    logger.info(f"[BEFORE] Payload: {payload}")
+    if payload_extension:
+        logger.info(f"[BEFORE] Payload extension: {payload_extension}")
+
+
+@on_tool_before
+def validate_tool_payload(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None
+):
+    """Validate tool payload before invocation (sync hook example)."""
+    if not payload:
+        logger.warning(f"[BEFORE] Tool {tool.name} invoked with empty payload")
+
+
+@on_tool_after
+async def log_tool_success(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    result: Any = None
+):
+    """Log successful tool invocation with result."""
+    logger.info(f"[AFTER] Tool {tool.name} completed successfully")
+    logger.info(f"[AFTER] Tool call ID: {tool_call_id}")
+    logger.info(f"[AFTER] Result type: {type(result).__name__}")
+    logger.info(f"[AFTER] Result: {result}")
+
+
+@on_tool_after
+def record_tool_metrics(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    result: Any = None
+):
+    """Record metrics for successful tool invocations (sync hook example)."""
+    # In a real application, you would send these metrics to a monitoring system
+    logger.info(f"[METRICS] Tool {tool.name} execution recorded")
+
+
+@on_tool_error
+async def handle_tool_error(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    error: Optional[Exception] = None
+):
+    """Handle tool invocation errors."""
+    logger.error(f"[ERROR] Tool {tool.name} failed")
+    logger.error(f"[ERROR] Tool call ID: {tool_call_id}")
+    logger.error(f"[ERROR] Error type: {type(error).__name__}")
+    logger.error(f"[ERROR] Error message: {str(error)}")
+    logger.error(f"[ERROR] Payload that caused error: {payload}")
+
+
+@on_tool_error
+def alert_on_tool_failure(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    error: Optional[Exception] = None
+):
+    """Send alerts for tool failures (sync hook example)."""
+    # In a real application, you would send this to an alerting system
+    logger.warning(f"[ALERT] Tool failure alert for {tool.name}: {str(error)}")
+```
+
+### Performance timing
+
+Use `tool_call_id` as a key to correlate before and after hooks and measure execution time.
+
+```python
+import time
+from typing import Optional, Dict, Any
+from xpander_sdk import on_tool_before, on_tool_after, on_tool_error, Tool
+from loguru import logger
+
+# Store start time per tool call
+TOOL_START_TIMES = {}
+
+
+@on_tool_before
+def start_tool_timer(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None
+):
+    """Start timer before tool execution."""
+    TOOL_START_TIMES[tool_call_id] = time.time()
+
+    logger.info(f"[TIMER-START] Tool: {tool.name}")
+    logger.info(f"[TIMER-START] Tool Call ID: {tool_call_id}")
+    logger.info(f"[TIMER-START] Agent Version: {agent_version}")
+    logger.info(f"[TIMER-START] Payload: {payload}")
+
+
+@on_tool_after
+async def stop_tool_timer(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    result: Any = None
+):
+    """Stop timer and log execution duration."""
+    start_time = TOOL_START_TIMES.get(tool_call_id)
+
+    if start_time:
+        duration = time.time() - start_time
+    else:
+        duration = -1  # fallback if hook failed
+
+    logger.success(f"[TIMER-END] Tool: {tool.name}")
+    logger.success(f"[TIMER-END] Tool Call ID: {tool_call_id}")
+    logger.success(f"[TIMER-END] Execution Time: {duration:.3f} seconds")
+    logger.success(f"[TIMER-END] Result Type: {type(result).__name__}")
+    logger.success(f"[TIMER-END] Result: {result}")
+
+    # Cleanup
+    TOOL_START_TIMES.pop(tool_call_id, None)
+
+
+@on_tool_error
+async def handle_tool_error_with_timing(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    error: Optional[Exception] = None
+):
+    """Handle tool failure and log execution time until crash."""
+    start_time = TOOL_START_TIMES.get(tool_call_id)
+
+    if start_time:
+        duration = time.time() - start_time
+    else:
+        duration = -1
+
+    logger.error(f"[TIMER-ERROR] Tool: {tool.name}")
+    logger.error(f"[TIMER-ERROR] Tool Call ID: {tool_call_id}")
+    logger.error(f"[TIMER-ERROR] Failed After: {duration:.3f} seconds")
+    logger.error(f"[TIMER-ERROR] Error Type: {type(error).__name__}")
+    logger.error(f"[TIMER-ERROR] Error Message: {str(error)}")
+    logger.error(f"[TIMER-ERROR] Payload: {payload}")
+
+    # Cleanup
+    TOOL_START_TIMES.pop(tool_call_id, None)
+```
+
+### Retry with exponential backoff
+
+An `@on_tool_error` hook can re-invoke the tool directly using `tool.ainvoke()`. This example implements a three-attempt retry with exponential backoff.
+
+<Warning>
+Track retry attempts by `tool_call_id` to avoid infinite retry loops. Always enforce a maximum retry count.
+</Warning>
+
+```python
+import asyncio
+from typing import Optional, Dict, Any
+from xpander_sdk import on_tool_error, Tool
+from loguru import logger
+
+# Retry configuration
+MAX_RETRIES = 3
+BASE_DELAY = 1  # seconds
+
+# Track retry attempts per tool call
+RETRY_COUNTER = {}
+
+
+def get_backoff_delay(attempt: int) -> int:
+    """Exponential backoff: 2^attempt"""
+    return BASE_DELAY * (2 ** attempt)
+
+
+@on_tool_error
+async def retry_failed_tool(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict[str, Any]] = None,
+    tool_call_id: Optional[str] = None,
+    agent_version: Optional[str] = None,
+    error: Optional[Exception] = None
+):
+    """Retry tool on failure with exponential backoff."""
+
+    # Initialize counter
+    RETRY_COUNTER.setdefault(tool_call_id, 0)
+    RETRY_COUNTER[tool_call_id] += 1
+
+    attempt = RETRY_COUNTER[tool_call_id]
+
+    logger.error(f"[RETRY] Tool failed: {tool.name}")
+    logger.error(f"[RETRY] Attempt: {attempt}/{MAX_RETRIES}")
+    logger.error(f"[RETRY] Error: {str(error)}")
+
+    if attempt > MAX_RETRIES:
+        logger.error("[RETRY] Max retries exceeded. Giving up.")
+        RETRY_COUNTER.pop(tool_call_id, None)
+        return
+
+    # Calculate delay
+    delay = get_backoff_delay(attempt)
+
+    logger.warning(f"[RETRY] Waiting {delay}s before retry...")
+
+    await asyncio.sleep(delay)
+
+    try:
+        logger.info("[RETRY] Retrying tool invocation...")
+
+        result = await tool.ainvoke(
+            agent_id=None,  # auto resolved
+            payload=payload,
+            payload_extension=payload_extension
+        )
+
+        logger.success("[RETRY] Tool succeeded after retry!")
+        logger.success(f"[RETRY] Result: {result}")
+
+        # Cleanup
+        RETRY_COUNTER.pop(tool_call_id, None)
+
+    except Exception as retry_error:
+        logger.error("[RETRY] Retry failed")
+        logger.error(str(retry_error))
+        raise retry_error
+```
+
+## Practical use cases
+
+| Use case | Hook | Pattern |
+|----------|------|---------|
+| Structured logging | `@on_tool_before` + `@on_tool_after` | Log tool name, payload, and result |
+| Performance monitoring / SLA tracking | `@on_tool_before` + `@on_tool_after` | Store start time keyed by `tool_call_id`, compute duration in after hook |
+| Input validation | `@on_tool_before` | Inspect `payload` and warn or raise early |
+| Retry on transient errors | `@on_tool_error` | Call `tool.ainvoke()` again with backoff |
+| Alerting / on-call notifications | `@on_tool_error` | Send to PagerDuty, Slack, etc. |
+| Audit trail | All three | Write every event to a database or log sink |
+| Result caching | `@on_tool_after` | Store `result` keyed by `payload` hash |
+
+<Tip>
+Hooks are global — they apply to every tool invoked in the process. If you only want to instrument specific tools, inspect `tool.name` or `tool.id` inside the hook body and return early for tools you want to skip.
+</Tip>

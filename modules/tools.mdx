@@ -1,0 +1,183 @@
+---
+title: "Tools module"
+description: "Register local Python functions as agent tools, manage the tools repository, and invoke tools with full schema validation."
+---
+
+The Tools module lets you register Python functions as first-class tools for xpander.ai agents. It manages both locally registered tools and backend-managed tools in a unified `ToolsRepository`, and provides sync/async invocation with schema validation and structured results.
+
+<CardGroup cols={2}>
+  <Card title="@register_tool decorator" icon="code">
+    Turn any sync or async Python function into an agent tool with a single decorator.
+  </Card>
+  <Card title="ToolsRepository" icon="box">
+    Unified registry that merges backend tools and locally registered tools without duplicates.
+  </Card>
+  <Card title="Async & sync invocation" icon="play">
+    Invoke any tool with `Tool.ainvoke()` or `Tool.invoke()`, with payload schema validation.
+  </Card>
+  <Card title="Graph synchronization" icon="arrows-rotate">
+    Mark tools with `add_to_graph=True` to automatically push them into agent execution graphs.
+  </Card>
+</CardGroup>
+
+## Key classes and exports
+
+| Symbol | Purpose |
+|---|---|
+| `register_tool` | Decorator to register a Python function as a tool |
+| `ToolsRepository` | Collection of all available tools for an agent |
+| `Tool` | Individual tool with `ainvoke()` / `invoke()` |
+| `ToolInvocationResult` | Structured result returned by every tool invocation |
+
+### `ToolInvocationResult` fields
+
+```python
+class ToolInvocationResult:
+    tool_id: str                 # ID of the invoked tool
+    payload: Any                 # Original payload
+    result: Any                  # Tool execution result
+    is_success: bool             # Success status
+    is_error: bool               # Error status
+    status_code: Optional[int]   # HTTP status code (if applicable)
+    tool_call_id: Optional[str]  # Unique call identifier
+    task_id: Optional[str]       # Associated task ID
+    is_local: bool               # Whether tool was executed locally
+```
+
+## Examples
+
+### Register local tools
+
+<Tabs>
+  <Tab title="Sync function">
+    ```python
+    from xpander_sdk import register_tool
+
+    @register_tool
+    def check_weather(location: str) -> str:
+        """Get weather information for a location."""
+        return f"Weather in {location}: Sunny, 25°C"
+    ```
+  </Tab>
+  <Tab title="Async function">
+    ```python
+    from xpander_sdk import register_tool
+
+    @register_tool
+    async def fetch_external_data(api_endpoint: str, headers: dict = None) -> dict:
+        """Fetch data from external API."""
+        return {"data": "fetched from API", "endpoint": api_endpoint}
+    ```
+  </Tab>
+  <Tab title="Complex parameters">
+    ```python
+    from xpander_sdk import register_tool
+
+    @register_tool
+    def analyze_data(
+        data_sources: list,
+        analysis_type: str,
+        include_charts: bool = False
+    ) -> dict:
+        """Analyze data from specified sources."""
+        return {
+            "sources_analyzed": len(data_sources),
+            "analysis_type": analysis_type,
+            "charts_included": include_charts,
+            "status": "completed"
+        }
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+Tool name is derived from the function name, description from its docstring, and schema from type hints. The decorated function remains callable as a normal Python function.
+</Note>
+
+### Register with graph synchronization
+
+```python
+@register_tool(add_to_graph=True)
+async def fetch_external_data(api_endpoint: str, headers: dict = None) -> dict:
+    """Fetch data from external API."""
+    return {"data": "fetched from API", "endpoint": api_endpoint}
+```
+
+<Tip>
+Set `add_to_graph=True` when you want the tool to be automatically pushed into the agent's execution graph on the platform. Check whether a sync is needed with `tools_repo.should_sync_local_tools()`.
+</Tip>
+
+### Use the ToolsRepository
+
+```python
+from xpander_sdk import ToolsRepository
+
+tools_repo = ToolsRepository(configuration=config)
+
+# List all available tools
+all_tools = tools_repo.list
+for tool in all_tools:
+    print(f"Tool: {tool.name} - {tool.description}")
+
+# Look up by ID
+weather_tool = tools_repo.get_tool_by_id("weather_check")
+```
+
+### Invoke a tool
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    result = await weather_tool.ainvoke(
+        agent_id="agent-123",
+        payload={"location": "New York"}
+    )
+    print(f"Tool result: {result.result}")
+    print(f"Success: {result.is_success}")
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    result = weather_tool.invoke(
+        agent_id="agent-123",
+        payload={"location": "London"}
+    )
+    print(f"Tool result: {result.result}")
+    ```
+  </Tab>
+</Tabs>
+
+### Check and perform local tool sync
+
+```python
+if tools_repo.should_sync_local_tools():
+    local_tools = tools_repo.get_local_tools_for_sync()
+    print(f"Found {len(local_tools)} tools to sync")
+
+    for tool in local_tools:
+        print(f"Syncing tool: {tool.name}")
+        # Sync logic is handled by the platform
+```
+
+## Error handling
+
+```python
+from xpander_sdk.exceptions import ModuleException
+
+try:
+    result = await tool.ainvoke(
+        agent_id="agent-123",
+        payload={"invalid": "data"}
+    )
+except ModuleException as e:
+    print(f"Tool execution failed: {e.description}")
+except ValueError as e:
+    print(f"Invalid payload: {e}")
+```
+
+## API reference
+
+For full method signatures and parameter details, see:
+
+- [ToolsRepository](/api-reference/tools/tools-repository)
+- [@register_tool decorator](/api-reference/tools/register-tool)

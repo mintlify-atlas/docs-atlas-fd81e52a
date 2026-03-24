@@ -1,0 +1,154 @@
+---
+title: "MCP server integration"
+description: "Integrate Model Context Protocol servers with your agents"
+---
+
+Model Context Protocol (MCP) is an open standard that lets AI agents connect to external tool servers over a common interface. The xpander SDK supports both STDIO-based and HTTP-based MCP servers through the `MCPServerDetails` model.
+
+## What are MCP servers?
+
+MCP servers expose tools (functions) that agents can call during task execution. Instead of hard-coding integrations, you configure an MCP server once and its tools become automatically available in the agent's `ToolsRepository`.
+
+## Core types
+
+### MCPServerType
+
+```python
+from xpander_sdk import MCPServerType
+```
+
+| Value | Description |
+|---|---|
+| `MCPServerType.STDIO` | The SDK launches the server as a subprocess and communicates via stdin/stdout |
+| `MCPServerType.HTTP` | The SDK connects to an already-running HTTP server at a given URL |
+
+### MCPServerAuthType
+
+```python
+from xpander_sdk import MCPServerAuthType
+```
+
+`MCPServerAuthType` specifies the authentication mechanism required by the MCP server (for example, OAuth flows). It is configured at the platform level alongside the server details.
+
+### MCPServerDetails
+
+`MCPServerDetails` describes a single MCP server. Its fields map directly to how the server is started or reached:
+
+```python
+class MCPServerDetails:
+    name: str                      # Server name
+    type: MCPServerType            # STDIO or HTTP
+    command: Optional[str]         # Command to launch the server (STDIO)
+    args: Optional[List[str]]      # Arguments for the command (STDIO)
+    env: Optional[Dict[str, str]]  # Environment variables for the server process
+    url: Optional[str]             # Server URL (HTTP type)
+```
+
+## Configuring an MCP server
+
+### STDIO server
+
+```python
+from xpander_sdk import MCPServerDetails, MCPServerType
+
+mcp_server = MCPServerDetails(
+    name="data-server",
+    type=MCPServerType.STDIO,
+    command="python",
+    args=["-m", "data_mcp_server"],
+    env={"API_KEY": "your-api-key"}
+)
+```
+
+### HTTP server
+
+```python
+from xpander_sdk import MCPServerDetails, MCPServerType
+
+mcp_server = MCPServerDetails(
+    name="data-server",
+    type=MCPServerType.STDIO,
+    command="python",
+    args=["-m", "mcp_server"],
+    env={"API_KEY": "your-key"}
+)
+```
+
+<Note>
+MCP servers are configured at the platform level (in the xpander.ai console or via the API). Once configured, their tools appear automatically in the agent's `ToolsRepository` — you do not need to register them manually in your code.
+</Note>
+
+## Accessing MCP servers on an agent
+
+After loading an agent, inspect its `mcp_servers` property to see which MCP servers are attached:
+
+```python
+from xpander_sdk import Agents, Configuration
+
+config = Configuration(
+    api_key="your-api-key",
+    organization_id="your-org-id"
+)
+agents_manager = Agents(configuration=config)
+agent = await agents_manager.aget(agent_id="your-agent-id")
+
+# Access MCP servers configured for the agent
+if agent.mcp_servers:
+    for mcp_server in agent.mcp_servers:
+        print(f"MCP Server: {mcp_server.name}")
+        print(f"Type: {mcp_server.type}")
+        print(f"Command: {mcp_server.command}")
+```
+
+## Tools from MCP servers in ToolsRepository
+
+Once an agent is loaded, all tools exposed by its MCP servers are merged into the `ToolsRepository` alongside any locally registered tools:
+
+```python
+# Access agent's tools repository (includes MCP tools)
+tools_repo = agent.tools
+print(f"Available tools: {len(tools_repo.functions)}")
+
+# Iterate all tools — MCP and local tools appear together
+all_tools = tools_repo.list
+for tool in all_tools:
+    print(f"Tool: {tool.name} - {tool.description}")
+
+# Retrieve and invoke a specific tool
+email_tool = tools_repo.get_tool_by_id(
+    "XpanderEmailServiceSendEmailWithHtmlOrTextContent"
+)
+if email_tool:
+    payload = {
+        "body_params": {
+            "subject": "Test email",
+            "body_html": "Hello world",
+            "to": ["user@example.com"],
+        },
+        "path_params": {},
+        "query_params": {},
+    }
+    result = await agent.ainvoke_tool(tool=email_tool, payload=payload)
+    print(f"Tool execution success: {result.is_success}")
+```
+
+## Tool invocation result
+
+Every tool call returns a `ToolInvocationResult`:
+
+```python
+class ToolInvocationResult:
+    tool_id: str                 # ID of the invoked tool
+    payload: Any                 # Original payload
+    result: Any                  # Tool execution result
+    is_success: bool             # Success status
+    is_error: bool               # Error status
+    status_code: Optional[int]   # HTTP status code (if applicable)
+    tool_call_id: Optional[str]  # Unique call identifier
+    task_id: Optional[str]       # Associated task ID
+    is_local: bool               # Whether tool was executed locally
+```
+
+<Tip>
+MCP servers are automatically loaded when an agent is retrieved. You do not need to restart the SDK or reinitialize the tools repository after adding a new MCP server to the platform — reload the agent to pick up the latest configuration.
+</Tip>

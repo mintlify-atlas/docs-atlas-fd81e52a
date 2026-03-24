@@ -1,0 +1,199 @@
+---
+title: "@on_task decorator"
+description: "Register functions as task execution handlers for agent deployment"
+---
+
+The `@on_task` decorator registers a Python function as the handler for incoming task execution requests. When an agent receives a task on the xpander.ai platform, the registered function is invoked with the `Task` object.
+
+## Import
+
+```python
+from xpander_sdk import on_task
+```
+
+## Usage
+
+<Tabs>
+  <Tab title="Simple">
+    Apply directly to a function. Configuration is auto-detected from environment variables:
+
+    ```python
+    from xpander_sdk import on_task
+
+    @on_task
+    async def handle_task(task):
+        task.result = "Task processed"
+        return task
+    ```
+  </Tab>
+  <Tab title="With configuration">
+    Pass an explicit `Configuration` object:
+
+    ```python
+    from xpander_sdk import on_task, Configuration
+
+    config = Configuration(
+        api_key="your-api-key",
+        organization_id="your-org-id"
+    )
+
+    @on_task(configuration=config)
+    async def handle_task(task):
+        task.result = "Task processed"
+        return task
+    ```
+  </Tab>
+  <Tab title="With test task">
+    Provide a local task for development and testing:
+
+    ```python
+    from xpander_sdk import on_task
+    from xpander_sdk.modules.tasks.models.task import LocalTaskTest, AgentExecutionInput
+    from xpander_sdk.models.shared import OutputFormat
+
+    local_task = LocalTaskTest(
+        input=AgentExecutionInput(text="What can you do?"),
+        output_format=OutputFormat.Json,
+        output_schema={"capabilities": "list of capabilities"}
+    )
+
+    @on_task(test_task=local_task)
+    async def handle_task(task):
+        task.result = {
+            "capabilities": ["data analysis", "text processing", "API integration"]
+        }
+        return task
+    ```
+  </Tab>
+</Tabs>
+
+## Parameters
+
+<ParamField body="configuration" type="Configuration" optional>
+  SDK configuration to use for this handler. When omitted, configuration is auto-detected from environment variables.
+</ParamField>
+
+<ParamField body="test_task" type="LocalTaskTest" optional>
+  A local task instance used during development or testing instead of waiting for a real task from the platform. Must be a `LocalTaskTest` instance.
+</ParamField>
+
+## Function signature requirements
+
+The decorated function:
+
+- **Must** accept a parameter named `task` (of type `Task`)
+- **Must** return the `Task` instance after processing
+- **Should** assign results to `task.result`
+- **May** be synchronous or asynchronous
+
+Status transitions are handled automatically — you do not need to manually update the task status.
+
+```python
+# Both sync and async are supported
+@on_task
+def sync_handler(task):    # Synchronous handler
+    task.result = "Done"
+    return task
+
+@on_task
+async def async_handler(task):  # Asynchronous handler
+    task.result = "Done"
+    return task
+```
+
+<Warning>
+  The function **must** have a `task` parameter. If it does not, a `TypeError` is raised at decoration time.
+</Warning>
+
+## Examples
+
+### Basic task handler
+
+```python
+from xpander_sdk import on_task
+
+@on_task
+async def handle_agent_task(task):
+    print(f"Received task: {task.id}")
+    print(f"Input: {task.input.text}")
+
+    # Process the task
+    task.result = "Task processed successfully"
+    return task
+```
+
+### Integration with the Backend module
+
+This is the most common pattern for deploying agents:
+
+```python
+from xpander_sdk import on_task, Backend
+
+@on_task
+async def handle_agent_task(task):
+    backend = Backend(task.configuration)
+
+    # Retrieve framework arguments for the agent
+    agno_args = await backend.aget_args(
+        agent_id=task.agent_id,
+        agent_version=task.agent_version,
+        task=task
+    )
+
+    # Instantiate and run your LLM framework agent
+    # agno_agent = Agent(**agno_args)
+    # result = await agno_agent.arun(message=task.to_message())
+    # task.result = result.content
+
+    task.result = "Task processed with Backend arguments"
+    return task
+```
+
+### Sync task handler
+
+```python
+from xpander_sdk import on_task
+
+@on_task
+def sync_task_handler(task):
+    print(f"Handling task synchronously: {task.id}")
+    task.result = "Processed synchronously"
+    return task
+```
+
+### Local testing with `LocalTaskTest`
+
+```python
+from xpander_sdk import on_task
+from xpander_sdk.modules.tasks.models.task import LocalTaskTest, AgentExecutionInput
+from xpander_sdk.models.shared import OutputFormat
+
+local_task = LocalTaskTest(
+    input=AgentExecutionInput(text="What can you do?"),
+    output_format=OutputFormat.Json,
+    output_schema={"capabilities": "list of capabilities"}
+)
+
+@on_task(test_task=local_task)
+async def handle_test_task(task):
+    task.result = {
+        "capabilities": [
+            "Data analysis",
+            "Text processing",
+            "API integration"
+        ]
+    }
+    return task
+```
+
+### CLI invocation
+
+When your script is run with `--invoke`, a local `LocalTaskTest` is created from the command-line arguments:
+
+```bash
+python agent.py --invoke --prompt "Summarize this week's sales" --output_format json
+```
+
+<Tip>
+  The `@on_task` decorator automatically registers the handler with the `Events` module. You do not need to call `Events.register()` manually.
+</Tip>

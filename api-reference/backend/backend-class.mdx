@@ -1,0 +1,349 @@
+---
+title: "Backend class"
+description: "Retrieve framework runtime arguments for agent execution"
+---
+
+The `Backend` class provides the bridge between xpander.ai task execution and LLM framework agents. Its primary purpose is to resolve the runtime arguments needed to instantiate and run a framework agent (e.g., Agno) in response to an incoming task.
+
+## Import
+
+```python
+from xpander_sdk import Backend
+```
+
+## Constructor
+
+```python
+Backend(configuration: Optional[Configuration] = None)
+```
+
+<ParamField body="configuration" type="Configuration" optional>
+  SDK configuration. When omitted, auto-detected from the `XPANDER_API_KEY` and `XPANDER_ORGANIZATION_ID` environment variables.
+</ParamField>
+
+```python
+from xpander_sdk import Backend
+
+backend = Backend()
+```
+
+## Methods
+
+### `aget_args` / `get_args`
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    async def aget_args(
+        agent_id: Optional[str] = None,
+        agent: Optional[Agent] = None,
+        agent_version: Optional[int] = None,
+        task: Optional[Task] = None,
+        override: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Callable]] = None,
+        is_async: Optional[bool] = True,
+        auth_events_callback: Optional[Callable] = None,
+    ) -> Dict[str, Any]
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    def get_args(
+        agent_id: Optional[str] = None,
+        agent: Optional[Agent] = None,
+        agent_version: Optional[int] = None,
+        task: Optional[Task] = None,
+        override: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Callable]] = None,
+        auth_events_callback: Optional[Callable] = None,
+    ) -> Dict[str, Any]
+    ```
+  </Tab>
+</Tabs>
+
+Resolve the runtime argument dictionary for instantiating a framework agent. The returned dict is framework-specific and can be unpacked directly into an agent constructor.
+
+<ParamField body="agent_id" type="str" optional>
+  The ID of the agent to resolve arguments for. Required if `agent` is not provided. Falls back to the `XPANDER_AGENT_ID` environment variable if neither is supplied.
+</ParamField>
+
+<ParamField body="agent" type="Agent" optional>
+  A preloaded `Agent` instance. Takes precedence over `agent_id` when provided.
+</ParamField>
+
+<ParamField body="agent_version" type="int" optional>
+  Optional version number of the agent to load.
+</ParamField>
+
+<ParamField body="task" type="Task" optional>
+  The current `Task` object. Provides runtime input/output context to the framework arguments.
+</ParamField>
+
+<ParamField body="override" type="Dict[str, Any]" optional>
+  Key-value pairs to override in the final resolved arguments.
+</ParamField>
+
+<ParamField body="tools" type="List[Callable]" optional>
+  Additional callable tools to inject into the resolved framework arguments.
+</ParamField>
+
+<ParamField body="is_async" type="bool" optional>
+  Whether the resolved arguments are for an async context. Defaults to `True` for `aget_args`, `False` for `get_args`.
+</ParamField>
+
+<ParamField body="auth_events_callback" type="Callable" optional>
+  Optional callback invoked for authentication events only (e.g., MCP OAuth flows). Signature: `callback(agent: Agent, task: Task, event: TaskUpdateEvent)`. See [`@on_auth_event`](#on_auth_event-decorator).
+</ParamField>
+
+**Returns:** `Dict[str, Any]` — resolved argument dictionary for the framework agent.
+
+**Raises:** `ValueError` if neither `agent` nor `agent_id` is provided and `XPANDER_AGENT_ID` is not set.
+
+```python
+backend = Backend()
+args = await backend.aget_args(agent_id="agent-123")
+
+# Use with an LLM framework (e.g., Agno)
+# agno_agent = Agent(**args)
+# result = await agno_agent.arun(message=task.to_message())
+```
+
+### `areport_external_task` / `report_external_task`
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    async def areport_external_task(
+        agent_id: Optional[str] = None,
+        agent: Optional[Agent] = None,
+        id: Optional[str] = None,
+        input: Optional[str] = None,
+        llm_response: Optional[Any] = None,
+        tokens: Optional[Tokens] = None,
+        is_success: Optional[bool] = True,
+        result: Optional[str] = None,
+        duration: Optional[float] = 0,
+        used_tools: Optional[list] = None,
+        configuration: Optional[Configuration] = None,
+    ) -> Task
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    def report_external_task(
+        agent_id: Optional[str] = None,
+        agent: Optional[Agent] = None,
+        id: Optional[str] = None,
+        input: Optional[str] = None,
+        llm_response: Optional[Any] = None,
+        tokens: Optional[Tokens] = None,
+        is_success: Optional[bool] = True,
+        result: Optional[str] = None,
+        duration: Optional[float] = 0,
+        used_tools: Optional[list] = None,
+        configuration: Optional[Configuration] = None,
+    ) -> Task
+    ```
+  </Tab>
+</Tabs>
+
+Report the result of an externally executed task back to the xpander.ai platform.
+
+<ParamField body="agent_id" type="str" optional>
+  The agent's ID. Falls back to `XPANDER_AGENT_ID` environment variable if omitted.
+</ParamField>
+
+<ParamField body="agent" type="Agent" optional>
+  A preloaded `Agent` instance. Takes precedence over `agent_id`.
+</ParamField>
+
+<ParamField body="id" type="str" optional>
+  The task identifier to report against.
+</ParamField>
+
+<ParamField body="input" type="str" optional>
+  The input prompt or message that was processed.
+</ParamField>
+
+<ParamField body="llm_response" type="Any" optional>
+  The raw LLM response object.
+</ParamField>
+
+<ParamField body="tokens" type="Tokens" optional>
+  Token usage information (`completion_tokens`, `prompt_tokens`, `total_tokens`).
+</ParamField>
+
+<ParamField body="is_success" type="bool" optional>
+  Whether the task completed successfully. Defaults to `True`.
+</ParamField>
+
+<ParamField body="result" type="str" optional>
+  The final result string to report.
+</ParamField>
+
+<ParamField body="duration" type="float" optional>
+  Execution duration in seconds. Defaults to `0`.
+</ParamField>
+
+<ParamField body="used_tools" type="list" optional>
+  List of tool names that were used during execution.
+</ParamField>
+
+**Returns:** `Task` — the reported task object from the backend.
+
+## `@on_auth_event` decorator
+
+```python
+from xpander_sdk import on_auth_event
+```
+
+Globally registers a function as an authentication event handler. The decorated function is automatically invoked for all `"auth_event"` events (e.g., MCP OAuth flows requiring user login) across any `Backend.aget_args()` calls.
+
+```python
+from xpander_sdk import on_auth_event, Backend, Agent, Task
+from xpander_sdk.models.tasks.task_update_event import TaskUpdateEvent
+
+@on_auth_event
+async def handle_auth(agent: Agent, task: Task, event: TaskUpdateEvent):
+    # event.type is always "auth_event"
+    print(f"Authentication required for {agent.name}")
+    print(f"Auth data: {event.data}")
+```
+
+The callback receives:
+- `agent` — the `Agent` associated with the task
+- `task` — the `Task` being executed
+- `event` — a `TaskUpdateEvent` where `event.type == "auth_event"` and `event.data` contains authentication-specific data (e.g., an OAuth login URL)
+
+## Custom LLM key resolution
+
+The `Backend` module automatically resolves custom LLM API keys configured on the agent:
+
+| Environment | Priority |
+|-------------|----------|
+| **xpander Cloud** | Custom LLM Key → Environment Variable |
+| **Local / self-hosted** | Environment Variable → Custom LLM Key |
+
+Custom keys are never exposed in logs or responses.
+
+## Examples
+
+### Basic usage with agent ID
+
+```python
+import os
+from xpander_sdk import Backend
+
+backend = Backend()
+
+# Option 1: explicit agent ID
+args = await backend.aget_args(agent_id="agent-123")
+
+# Option 2: environment variable
+os.environ["XPANDER_AGENT_ID"] = "agent-123"
+args = await backend.aget_args()
+```
+
+### Integration with `@on_task`
+
+```python
+from xpander_sdk import Backend, on_task
+
+@on_task
+async def handle_agent_task(task):
+    backend = Backend(task.configuration)
+
+    agno_args = await backend.aget_args(
+        agent_id=task.agent_id,
+        agent_version=task.agent_version,
+        task=task
+    )
+
+    # agno_agent = Agent(**agno_args)
+    # result = await agno_agent.arun(message=task.to_message())
+    # task.result = result.content
+
+    task.result = "Task processed"
+    return task
+```
+
+### Auth events callback
+
+<Tabs>
+  <Tab title="Direct function">
+    ```python
+    from xpander_sdk import Backend
+
+    backend = Backend()
+
+    async def my_auth_callback(agent, task, event):
+        print(f"Auth required: {event.data}")
+
+    args = await backend.aget_args(
+        agent_id="agent-123",
+        auth_events_callback=my_auth_callback
+    )
+    ```
+  </Tab>
+  <Tab title="Decorator (global)">
+    ```python
+    from xpander_sdk import Backend, on_auth_event
+
+    backend = Backend()
+
+    @on_auth_event
+    async def handle_auth(agent, task, event):
+        print(f"[GLOBAL] Auth event for {agent.name}: {event.data}")
+
+    # Decorated handler is invoked automatically
+    args = await backend.aget_args(agent_id="agent-123")
+    ```
+  </Tab>
+  <Tab title="Both combined">
+    ```python
+    from xpander_sdk import Backend, on_auth_event
+
+    @on_auth_event
+    async def log_all_auth(agent, task, event):
+        print(f"[GLOBAL] Auth event for {agent.name}")
+
+    async def custom_handler(agent, task, event):
+        print(f"[CUSTOM] Specific handling")
+
+    backend = Backend()
+    # Both handlers are invoked
+    args = await backend.aget_args(
+        agent_id="agent-123",
+        auth_events_callback=custom_handler
+    )
+    ```
+  </Tab>
+</Tabs>
+
+### Report an external task
+
+```python
+import uuid
+from xpander_sdk import Backend
+from xpander_sdk.models.shared import Tokens
+
+backend = Backend()
+
+tokens = Tokens(
+    completion_tokens=150,
+    prompt_tokens=50,
+    total_tokens=200
+)
+
+reported_task = await backend.areport_external_task(
+    agent_id="agent-123",
+    id=str(uuid.uuid4()),
+    input="Analyze sales data and generate report",
+    llm_response={"content": "Analysis complete", "model": "gpt-4"},
+    tokens=tokens,
+    is_success=True,
+    result="Generated comprehensive sales analysis report",
+    duration=4.2,
+    used_tools=["data_analyzer", "chart_generator", "report_writer"]
+)
+```

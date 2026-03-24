@@ -1,0 +1,220 @@
+---
+title: "Backend module"
+description: "Retrieve agent runtime arguments for framework integration, handle authentication events, report external task results, and resolve custom LLM keys."
+---
+
+The Backend module bridges the xpander.ai platform and agent execution frameworks such as Agno. It resolves runtime arguments (model provider, credentials, tools) for a given agent and task, handles authentication event callbacks, and provides a convenient way to report external task results.
+
+<CardGroup cols={2}>
+  <Card title="Framework integration" icon="plug">
+    `aget_args()` returns a dict of keyword arguments ready to pass to framework constructors such as `agno.agent.Agent(**args)`.
+  </Card>
+  <Card title="Custom LLM key resolution" icon="key">
+    Automatically selects the correct API key based on deployment environment, with secure fallback logic.
+  </Card>
+  <Card title="Auth event callbacks" icon="shield-check">
+    Register handlers for authentication flows (e.g., MCP OAuth) via callback or the `@on_auth_event` decorator.
+  </Card>
+  <Card title="External task reporting" icon="upload">
+    Report execution results from pipelines that run outside xpander.ai using `areport_external_task()`.
+  </Card>
+</CardGroup>
+
+## Key class
+
+| Class | Purpose |
+|---|---|
+| `Backend` | Resolves agent runtime args and reports external task results |
+
+## Examples
+
+### Retrieve agent arguments
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    from xpander_sdk.modules.backend import Backend
+    import os
+
+    backend = Backend()
+
+    # Option 1: explicit agent ID
+    args = await backend.aget_args(agent_id="agent-id")
+
+    # Option 2: read agent ID from environment variable
+    os.environ["XPANDER_AGENT_ID"] = "agent-id"
+    args_env = await backend.aget_args()
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    from xpander_sdk.modules.backend import Backend
+
+    backend = Backend()
+    args_sync = backend.get_args(agent_id="agent-id")
+    ```
+  </Tab>
+</Tabs>
+
+### Integration with `@on_task` and Agno
+
+```python
+from xpander_sdk import Backend, on_task
+
+@on_task
+async def handle_agent_task(task):
+    backend = Backend(task.configuration)
+    agno_args = await backend.aget_args(
+        agent_id=task.agent_id,
+        agent_version=task.agent_version,
+        task=task
+    )
+    # Use agno_args to instantiate framework agent
+    # agno_agent = Agent(**agno_args)
+    # result = await agno_agent.arun(message=task.to_message())
+    task.result = "Task processed with Backend arguments"
+    return task
+```
+
+### Authentication event callbacks
+
+The `auth_events_callback` is triggered only for authentication flows such as MCP OAuth that require a user action.
+
+<Tabs>
+  <Tab title="Direct function">
+    ```python
+    from xpander_sdk import Backend, Agent, Task
+    from xpander_sdk.models.tasks.task_update_event import TaskUpdateEvent
+
+    backend = Backend()
+
+    async def my_event_callback(agent: Agent, task: Task, event: TaskUpdateEvent):
+        # event.type is always "auth_event" for authentication flows
+        print(f"Authentication required: {event.data}")
+
+    args = await backend.aget_args(
+        agent_id="agent-123",
+        auth_events_callback=my_event_callback
+    )
+    ```
+  </Tab>
+  <Tab title="@on_auth_event decorator">
+    ```python
+    from xpander_sdk import Backend, on_auth_event, Agent, Task
+    from xpander_sdk.models.tasks.task_update_event import TaskUpdateEvent
+
+    backend = Backend()
+
+    # Auto-registered globally — no need to pass to aget_args
+    @on_auth_event
+    async def handle_auth(agent: Agent, task: Task, event: TaskUpdateEvent):
+        print(f"Authentication required: {event.data}")
+
+    args = await backend.aget_args(agent_id="agent-123")
+    ```
+  </Tab>
+  <Tab title="Combine both">
+    ```python
+    from xpander_sdk import Backend, on_auth_event
+
+    # Global handler for all auth events
+    @on_auth_event
+    async def log_all_auth(agent, task, event):
+        print(f"[GLOBAL] Auth event for {agent.name}")
+
+    # Additional one-time handler for a specific call
+    async def custom_handler(agent, task, event):
+        print(f"[CUSTOM] Specific handling")
+
+    # Both handlers will be invoked
+    args = await backend.aget_args(
+        agent_id="agent-123",
+        auth_events_callback=custom_handler
+    )
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+Decorated `@on_auth_event` handlers are auto-registered and always invoked. You can combine them with an explicit `auth_events_callback` for per-call handling.
+</Note>
+
+### Report external task execution
+
+```python
+import uuid
+from xpander_sdk.modules.backend import Backend
+from xpander_sdk.models.shared import Tokens
+
+backend = Backend()
+
+# Simple report
+reported_task = await backend.areport_external_task(
+    agent_id="agent-123",
+    id=str(uuid.uuid4()),
+    input="Process customer data",
+    result="Successfully processed 100 customer records",
+    duration=2.5
+)
+
+# Report with full execution details
+tokens = Tokens(
+    completion_tokens=150,
+    prompt_tokens=50,
+    total_tokens=200
+)
+
+reported_task = await backend.areport_external_task(
+    agent_id="agent-123",
+    id=str(uuid.uuid4()),
+    input="Analyze sales data and generate report",
+    llm_response={"content": "Analysis complete", "model": "gpt-4"},
+    tokens=tokens,
+    is_success=True,
+    result="Generated comprehensive sales analysis report",
+    duration=4.2,
+    used_tools=["data_analyzer", "chart_generator", "report_writer"]
+)
+```
+
+## Custom LLM key resolution
+
+When `aget_args()` is called the Backend module resolves the LLM API key automatically:
+
+<Steps>
+  <Step title="xpander Cloud environment">
+    Priority: **Custom LLM Key** → Environment Variable
+
+    The agent's stored `llm_credentials` take precedence over any key set in the environment.
+  </Step>
+  <Step title="Local / self-hosted environment">
+    Priority: **Environment Variable** → Custom LLM Key
+
+    A locally set environment variable overrides the agent's stored credentials, giving you full control during development.
+  </Step>
+</Steps>
+
+<Warning>
+Custom LLM keys are never exposed in logs or API responses. The actual key value is securely stored on the platform and resolved server-side.
+</Warning>
+
+You can inspect whether an agent has custom credentials configured:
+
+```python
+from xpander_sdk import Backend
+
+backend = Backend()
+args = await backend.aget_args(agent=agent)
+# The resolved model inside `args` already uses the correct API key
+
+if agent.llm_credentials:
+    print(f"Agent has custom LLM key: {agent.llm_credentials.name}")
+    print(f"Description: {agent.llm_credentials.description}")
+    # The actual key value is not displayed
+```
+
+## API reference
+
+For full method signatures and parameter details, see:
+
+- [Backend class](/api-reference/backend/backend-class)

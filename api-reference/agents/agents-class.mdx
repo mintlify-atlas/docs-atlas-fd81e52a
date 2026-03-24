@@ -1,0 +1,177 @@
+---
+title: "Agents class"
+description: "API reference for the Agents module class — list and retrieve agents"
+---
+
+The `Agents` class is the main entry point for managing AI agents in the xpander.ai platform. It provides both synchronous and asynchronous methods for listing and retrieving agent instances.
+
+## Constructor
+
+```python
+Agents(configuration: Optional[Configuration] = None)
+```
+
+<ParamField body="configuration" type="Configuration" required={false}>
+  SDK configuration object. If `None`, the module falls back to environment variables (`XPANDER_API_KEY`, `XPANDER_ORGANIZATION_ID`).
+</ParamField>
+
+---
+
+## Methods
+
+### `alist()`
+
+Asynchronously list all agents accessible to the current user or organization.
+
+```python
+async def alist() -> List[AgentsListItem]
+```
+
+**Returns**
+
+<ResponseField name="agents" type="List[AgentsListItem]">
+  A list of [AgentsListItem](/api-reference/agents/agents-list-item) objects, each containing summary information (ID, name, status, etc.) about an agent.
+</ResponseField>
+
+**Raises**
+
+- `ModuleException` — If the API request fails or returns an error. The exception contains the HTTP status code and error message.
+
+---
+
+### `list()`
+
+Synchronous version of [`alist()`](#alist). Internally calls the async method and blocks until complete.
+
+```python
+def list() -> List[AgentsListItem]
+```
+
+**Returns**
+
+<ResponseField name="agents" type="List[AgentsListItem]">
+  A list of [AgentsListItem](/api-reference/agents/agents-list-item) summary objects.
+</ResponseField>
+
+**Raises**
+
+- `ModuleException` — If the API request fails or returns an error.
+
+---
+
+### `aget()`
+
+Asynchronously retrieve a specific agent by ID. Returns a fully loaded `Agent` object with complete configuration, graph definitions, and all associated metadata.
+
+```python
+async def aget(
+    agent_id: Optional[str] = None,
+    version: Optional[int] = None
+) -> Agent
+```
+
+<ParamField body="agent_id" type="str" required={false}>
+  Unique identifier of the agent to retrieve. Falls back to `XPANDER_AGENT_ID` environment variable if not provided.
+</ParamField>
+
+<ParamField body="version" type="int" required={false}>
+  Specific version number of the agent to load. If `None`, the latest version is returned.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="agent" type="Agent">
+  A fully loaded [Agent](/api-reference/agents/agent-class) object with complete configuration and capabilities.
+</ResponseField>
+
+**Raises**
+
+- `ModuleException` — If the agent is not found, access is denied, or the API request fails.
+
+---
+
+### `get()`
+
+Synchronous version of [`aget()`](#aget). Internally calls the async method and blocks until complete.
+
+```python
+def get(
+    agent_id: Optional[str] = None,
+    version: Optional[int] = None
+) -> Agent
+```
+
+<ParamField body="agent_id" type="str" required={false}>
+  Unique identifier of the agent to retrieve. Falls back to `XPANDER_AGENT_ID` environment variable if not provided.
+</ParamField>
+
+<ParamField body="version" type="int" required={false}>
+  Specific version number to load. If `None`, the latest version is returned.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="agent" type="Agent">
+  A fully loaded [Agent](/api-reference/agents/agent-class) object.
+</ResponseField>
+
+**Raises**
+
+- `ModuleException` — If the agent is not found, access is denied, or the API request fails.
+
+---
+
+## Code example
+
+```python
+import asyncio
+from xpander_sdk import Agents, Configuration
+
+async def main():
+    # Initialize the Agents module
+    config = Configuration(api_key="your-api-key", organization_id="your-org-id")
+    agents_manager = Agents(configuration=config)
+
+    # List all agents
+    all_agents = await agents_manager.alist()
+    for agent_item in all_agents:
+        print(f"Agent: {agent_item.name} (ID: {agent_item.id})")
+
+    # Retrieve a specific agent by ID
+    agent = await agents_manager.aget(agent_id="your-agent-id")
+    print(f"Loaded agent: {agent.name}")
+
+    # Retrieve a specific version
+    agent_v2 = await agents_manager.aget(agent_id="your-agent-id", version=2)
+    print(f"Loaded agent version: {agent_v2.version}")
+
+asyncio.run(main())
+```
+
+**Synchronous equivalent:**
+
+```python
+from xpander_sdk import Agents, Configuration
+
+config = Configuration(api_key="your-api-key", organization_id="your-org-id")
+agents_manager = Agents(configuration=config)
+
+# List agents synchronously
+agent_list = agents_manager.list()
+print(f"Found {len(agent_list)} agents")
+
+# Retrieve an agent synchronously
+agent = agents_manager.get(agent_id="your-agent-id")
+print(f"Agent name: {agent.name}")
+```
+
+## Error handling
+
+```python
+from xpander_sdk.exceptions import ModuleException
+
+try:
+    agent = await agents_manager.aget(agent_id="invalid-id")
+except ModuleException as e:
+    print(f"Error {e.status_code}: {e.description}")
+```

@@ -1,0 +1,122 @@
+---
+title: "Self-hosted deployment"
+description: "Configure the SDK to work with an on-premise xpander.ai installation"
+---
+
+xpander.ai can be deployed on your own infrastructure using the Helm chart. When using a self-hosted installation, you point the SDK at your **Agent Controller** endpoint instead of the default cloud endpoint.
+
+## Cloud vs self-hosted
+
+| | Cloud | Self-hosted |
+|---|---|---|
+| Base URL | `https://inbound.xpander.ai` (default) | Your Agent Controller URL |
+| API key | xpander.ai cloud API key | Agent Controller API key (from Helm install) |
+| Organisation ID | From xpander.ai console | Your organisation ID |
+
+<Warning>
+Do **not** use your xpander.ai cloud API key with a self-hosted deployment. Use the **Agent Controller API key** generated during the Helm installation. Using the wrong key will result in authentication failures.
+</Warning>
+
+## Configuration
+
+### Environment variables
+
+```bash
+# Set environment variables
+export XPANDER_API_KEY="your-agent-controller-api-key"  # From Helm installation
+export XPANDER_ORGANIZATION_ID="your-org-id"
+export XPANDER_BASE_URL="https://agent-controller.my-company.com"
+```
+
+### Configuration object
+
+```python
+from xpander_sdk import Configuration
+
+config = Configuration(
+    api_key="your-agent-controller-api-key",  # From Helm installation
+    organization_id="your-org-id",
+    base_url="https://agent-controller.my-company.com"
+)
+```
+
+<Note>
+Make sure `base_url` points to the Agent Controller endpoint (e.g. `https://agent-controller.{your-domain}`), not the root domain of your installation.
+</Note>
+
+## Complete self-hosted example
+
+```python
+import asyncio
+from xpander_sdk import Configuration, Agent
+
+async def main():
+    # Configure for self-hosted deployment
+    config = Configuration(
+        api_key="your-agent-controller-api-key",  # From Helm installation
+        organization_id="your-org-id",
+        base_url="https://agent-controller.my-company.com"
+    )
+
+    # Load agent from self-hosted deployment
+    agent = await Agent.aload("agent-123", configuration=config)
+    print(f"Agent: {agent.name}")
+
+    # Create and execute task
+    task = await agent.acreate_task(
+        prompt="Analyze Q4 sales data",
+        file_urls=["https://example.com/sales-q4.csv"]
+    )
+    print(f"Task created: {task.id}")
+    print(f"Status: {task.status}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Using with the Agno framework
+
+The `Backend` module accepts any `Configuration` object, so self-hosted deployments work transparently with Agno:
+
+```python
+from xpander_sdk import Backend, Configuration
+from agno.agent import Agent
+
+# Configure for self-hosted
+config = Configuration(
+    api_key="your-agent-controller-api-key",  # From Helm installation
+    organization_id="your-org-id",
+    base_url="https://agent-controller.my-company.com"
+)
+
+# Initialize Backend with self-hosted config
+backend = Backend(configuration=config)
+
+# Create agent — it will use your self-hosted infrastructure
+agno_agent = Agent(**backend.get_args(agent_id="agent-123"))
+
+# Run agent
+result = await agno_agent.arun(
+    input="What can you help me with?",
+    stream=True
+)
+```
+
+## From a .env file
+
+For local development, store credentials in a `.env` file and load them with `python-dotenv`:
+
+```bash
+# .env
+XPANDER_API_KEY=your-agent-controller-api-key
+XPANDER_ORGANIZATION_ID=your-org-id
+XPANDER_BASE_URL=https://agent-controller.my-company.com
+```
+
+```python
+from dotenv import load_dotenv
+from xpander_sdk import Configuration
+
+load_dotenv()
+config = Configuration()  # Reads from environment variables automatically
+```

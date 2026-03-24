@@ -1,0 +1,165 @@
+---
+title: "KnowledgeBases class"
+description: "Create, list, and retrieve knowledge bases"
+---
+
+The `KnowledgeBases` class manages the collection of knowledge bases in your xpander.ai organization. Use it to create new knowledge bases, list existing ones, or retrieve a specific knowledge base by ID.
+
+## Import
+
+```python
+from xpander_sdk import KnowledgeBases
+```
+
+## Constructor
+
+```python
+KnowledgeBases(configuration: Optional[Configuration] = None)
+```
+
+<ParamField body="configuration" type="Configuration" optional>
+  SDK configuration. When omitted, auto-detected from the `XPANDER_API_KEY` and `XPANDER_ORGANIZATION_ID` environment variables.
+</ParamField>
+
+## Methods
+
+### `acreate` / `create`
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    async def acreate(
+        name: str,
+        description: Optional[str] = ""
+    ) -> KnowledgeBase
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    def create(
+        name: str,
+        description: Optional[str] = ""
+    ) -> KnowledgeBase
+    ```
+  </Tab>
+</Tabs>
+
+Create a new knowledge base in the xpander.ai platform.
+
+<ParamField body="name" type="str" required>
+  The name of the new knowledge base.
+</ParamField>
+
+<ParamField body="description" type="str" optional>
+  A brief description of the knowledge base. Defaults to an empty string.
+</ParamField>
+
+**Returns:** [`KnowledgeBase`](/api-reference/knowledge-bases/knowledge-base-class)
+
+**Raises:** `ModuleException` if creation fails.
+
+```python
+new_kb = await kbs.acreate(
+    name="Product Documentation",
+    description="Internal product docs and FAQs"
+)
+print(f"Created KB with ID: {new_kb.id}")
+```
+
+### `alist` / `list`
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    async def alist() -> List[KnowledgeBase]
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    def list() -> List[KnowledgeBase]
+    ```
+  </Tab>
+</Tabs>
+
+Retrieve all knowledge bases accessible to the current organization.
+
+**Returns:** `List[KnowledgeBase]`
+
+**Raises:** `ModuleException` if the API request fails.
+
+```python
+kb_list = await kbs.alist()
+for kb in kb_list:
+    print(f"{kb.name} ({kb.id}) — {kb.total_documents} documents")
+```
+
+### `aget` / `get`
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    async def aget(knowledge_base_id: str) -> KnowledgeBase
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    def get(knowledge_base_id: str) -> KnowledgeBase
+    ```
+  </Tab>
+</Tabs>
+
+Retrieve a specific knowledge base by its unique ID.
+
+<ParamField body="knowledge_base_id" type="str" required>
+  The unique identifier of the knowledge base to retrieve.
+</ParamField>
+
+**Returns:** [`KnowledgeBase`](/api-reference/knowledge-bases/knowledge-base-class)
+
+**Raises:** `ModuleException` if the knowledge base is not found or access is denied.
+
+```python
+kb = await kbs.aget(knowledge_base_id="2fd003b1-51b8-4f68-b0e7-68c3d63d70c9")
+print(f"Loaded: {kb.name}")
+```
+
+## Full example
+
+```python
+from xpander_sdk import KnowledgeBases, KnowledgeBase, Configuration
+
+config = Configuration(
+    api_key="your-api-key",
+    organization_id="your-org-id"
+)
+kbs = KnowledgeBases(configuration=config)
+
+# List all knowledge bases
+kb_list = await kbs.alist()
+print(f"Found {len(kb_list)} knowledge bases")
+
+# Create a new knowledge base
+new_kb = await kbs.acreate(
+    name="Support Articles",
+    description="Customer support documentation"
+)
+
+# Add documents
+doc_url = "https://example.com/support-guide.pdf"
+documents = await new_kb.aadd_documents(
+    document_urls=[doc_url],
+    sync=True  # Wait for processing to complete
+)
+print(f"Added {len(documents)} document(s)")
+
+# Search
+results = await new_kb.asearch(
+    search_query="how to reset password",
+    top_k=5
+)
+for result in results:
+    print(f"[{result.score:.2f}] {result.content[:100]}")
+
+# Clean up
+await new_kb.adelete()
+```

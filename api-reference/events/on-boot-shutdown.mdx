@@ -1,0 +1,151 @@
+---
+title: "@on_boot and @on_shutdown decorators"
+description: "Lifecycle hooks for agent initialization and cleanup"
+---
+
+The `@on_boot` and `@on_shutdown` decorators allow you to register functions that run at specific points in the agent lifecycle — before the event listener starts, and during graceful shutdown respectively.
+
+## Import
+
+```python
+from xpander_sdk import on_boot, on_shutdown
+```
+
+## `@on_boot`
+
+Registers a function to execute during the application boot phase, **before** event listeners are set up and task processing begins.
+
+Use boot handlers for one-time initialization tasks such as:
+- Connecting to databases
+- Loading configuration files
+- Validating environment variables
+- Warming up caches
+
+```python
+@on_boot
+async def initialize_services():
+    """Connect to required services before processing tasks."""
+    await database.connect()
+    await cache.warm_up()
+    print("All services initialized")
+```
+
+### Parameters
+
+<ParamField body="configuration" type="Configuration" optional>
+  An optional configuration object passed when using `@on_boot(configuration=config)` syntax.
+</ParamField>
+
+### Execution notes
+
+- Runs **once** during startup, before any event listeners are registered
+- Supports both synchronous and asynchronous functions
+- Handlers execute in **registration order**
+- If a boot handler raises an exception, the application fails to start
+
+## `@on_shutdown`
+
+Registers a function to execute during the application shutdown phase, **after** event listeners are stopped.
+
+Use shutdown handlers for cleanup tasks such as:
+- Closing database connections
+- Flushing logs or metrics
+- Saving application state
+- Releasing external resources
+
+```python
+@on_shutdown
+async def cleanup_resources():
+    """Release all held resources on shutdown."""
+    await database.close()
+    await metrics_client.flush()
+    print("All resources released")
+```
+
+### Parameters
+
+<ParamField body="configuration" type="Configuration" optional>
+  An optional configuration object passed when using `@on_shutdown(configuration=config)` syntax.
+</ParamField>
+
+### Execution notes
+
+- Runs **once** during shutdown
+- Supports both synchronous and asynchronous functions
+- Handlers execute in **registration order**
+- Exceptions in shutdown handlers are logged but do **not** prevent the shutdown from completing
+
+## Examples
+
+### Async boot and shutdown handlers
+
+```python
+from xpander_sdk import on_boot, on_shutdown
+
+@on_boot
+async def initialize_database():
+    database = Database()
+    await database.connect()
+    print("Database connected")
+
+@on_boot
+def load_configuration():
+    config = load_config_file()
+    validate_config(config)
+    print("Configuration loaded and validated")
+
+@on_shutdown
+async def cleanup_database():
+    database = get_database_connection()
+    await database.close()
+    print("Database connection closed")
+
+@on_shutdown
+def save_application_state():
+    state = get_current_state()
+    save_state_to_file(state)
+    print("Application state saved")
+```
+
+### Combined with `@on_task`
+
+```python
+from xpander_sdk import on_boot, on_shutdown, on_task
+
+# Shared resource initialized at boot
+db_connection = None
+
+@on_boot
+async def setup():
+    global db_connection
+    db_connection = await create_db_connection()
+    print("Database ready")
+
+@on_task
+async def handle_task(task):
+    # db_connection is available here because @on_boot ran first
+    results = await db_connection.query("SELECT * FROM records LIMIT 10")
+    task.result = {"records": results}
+    return task
+
+@on_shutdown
+async def teardown():
+    if db_connection:
+        await db_connection.close()
+    print("Cleanup complete")
+```
+
+### With explicit configuration
+
+```python
+from xpander_sdk import on_boot, Configuration
+
+config = Configuration(
+    api_key="your-api-key",
+    organization_id="your-org-id"
+)
+
+@on_boot(configuration=config)
+async def initialize_with_config():
+    print("Initializing with explicit configuration")
+```

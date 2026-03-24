@@ -1,0 +1,236 @@
+---
+title: "Authentication events example"
+description: "Handle MCP OAuth and authentication flows in real-time"
+---
+
+When an agent invokes a tool that requires authentication — for example, an MCP server protected by OAuth — the SDK emits an `auth_event`. Your code can react to these events to prompt users to log in, surface a login URL, or trigger token-refresh logic.
+
+## When auth events fire
+
+Auth events are triggered during `Backend.aget_args()` when the agent encounters an authentication flow such as MCP OAuth. The event carries the login URL and any other connector-specific data your code needs to complete the flow.
+
+## The `TaskUpdateEvent` structure
+
+Every auth event arrives as a `TaskUpdateEvent`:
+
+```python
+class TaskUpdateEvent:
+    type: str              # Always "auth_event" for auth flows
+    time: datetime         # Timestamp of the event
+    data: Any              # Auth-specific data (e.g. OAuth login URL)
+```
+
+The callback always receives three arguments:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `agent` | `Agent` | The agent associated with the running task |
+| `task` | `Task` | The task that triggered the auth event |
+| `event` | `TaskUpdateEvent` | Event object with `type`, `time`, and `data` |
+
+## Three approaches
+
+You can handle auth events in three different ways. All three can be combined — decorated handlers fire globally, and the explicit `auth_events_callback` fires as an additional per-call handler.
+
+<Tabs>
+  <Tab title="Direct callback">
+    Pass an async function directly to `aget_args()` via `auth_events_callback`. This is useful for one-off or per-call handling.
+
+    ```python
+    from xpander_sdk import Backend, Agent, Task
+    from xpander_sdk.models.tasks.task_update_event import TaskUpdateEvent
+
+    backend = Backend()
+
+    # Async callback - receives agent, task, and event
+    async def my_event_callback(agent: Agent, task: Task, event: TaskUpdateEvent):
+        # event.type will always be "auth_event"
+        print(f"Authentication required: {event.data}")
+        # Display login URL or handle OAuth flow
+
+    # Pass callback to aget_args
+    args = await backend.aget_args(
+        agent_id="agent-123",
+        auth_events_callback=my_event_callback
+    )
+    ```
+  </Tab>
+
+  <Tab title="@on_auth_event decorator">
+    Decorate a function with `@on_auth_event` to register it as a global handler. It is automatically invoked for every auth event without needing to be passed explicitly.
+
+    ```python
+    from xpander_sdk import Backend, on_auth_event, Agent, Task
+    from xpander_sdk.models.tasks.task_update_event import TaskUpdateEvent
+
+    backend = Backend()
+
+    # Use decorator - auto-registers globally
+    @on_auth_event
+    async def handle_auth(agent: Agent, task: Task, event: TaskUpdateEvent):
+        # event.type will always be "auth_event"
+        print(f"Authentication required: {event.data}")
+
+    # Decorated handler is automatically invoked - no need to pass it
+    args = await backend.aget_args(
+        agent_id="agent-123"
+    )
+    ```
+  </Tab>
+
+  <Tab title="Combining both">
+    Register a global decorated handler for logging or auditing, and pass an additional per-call callback for specific use cases. Both are invoked.
+
+    ```python
+    from xpander_sdk import Backend, on_auth_event
+
+    # Global handler for all auth events
+    @on_auth_event
+    async def log_all_auth(agent, task, event):
+        print(f"[GLOBAL] Auth event for {agent.name}")
+
+    # Additional one-time handler for specific use case
+    async def custom_handler(agent, task, event):
+        print(f"[CUSTOM] Specific handling")
+
+    # Both handlers will be invoked
+    args = await backend.aget_args(
+        agent_id="agent-123",
+        auth_events_callback=custom_handler  # Optional additional callback
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Full working example
+
+The example below loads an agent, creates a task with event streaming enabled, and listens for auth events both through the `@on_auth_event` decorator and directly from the event stream.
+
+```python
+import os
+import asyncio
+from loguru import logger
+
+from xpander_sdk import (
+    Configuration,
+    Agent,
+    on_auth_event
+)
+
+AGENT_ID = os.getenv("XPANDER_AGENT_ID")
+
+
+# ---------------- AUTH HOOK ---------------- #
+
+@on_auth_event
+async def handle_auth(agent, task, event):
+    """
+    Global auth event hook
+    Triggered when login/OAuth required
+    """
+    logger.warning("Authentication required!")
+    logger.info(f"Agent: {agent.name}")
+    logger.info(f"Event data: {event.data}")
+
+
+# ---------------- MAIN ---------------- #
+
+async def main():
+
+    if not AGENT_ID:
+        logger.error("XPANDER_AGENT_ID not set")
+        logger.error("Run: export XPANDER_AGENT_ID=your_agent_id")
+        return
+
+    logger.info("Loading agent...")
+
+    config = Configuration()
+    agent = await Agent.aload(AGENT_ID, configuration=config)
+
+    logger.success(f"Agent loaded: {agent.name}")
+
+    logger.info("Creating task with streaming enabled...")
+
+    task = await agent.acreate_task(
+        prompt="Call any tool that requires authentication",
+        events_streaming=True
+    )
+
+    logger.success(f"Task created: {task.id}")
+    logger.info("Listening for live events...")
+
+    # -------- STREAM EVENTS -------- #
+    async for event in task.aevents():
+
+        logger.info(f"Event type: {event.type}")
+
+        # Auth events ALSO come from stream
+        if event.type == "auth_event":
+            logger.warning("Auth event received from stream!")
+            logger.info(event.data)
+
+    logger.success("Task finished!")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+<Note>
+Auth events are emitted both through the `@on_auth_event` / `auth_events_callback` path **and** from the task event stream when `events_streaming=True`. You can handle them in either place, or both simultaneously.
+</Note>
+
+## Setup
+
+<Steps>
+  <Step title="Set environment variables">
+    ```bash
+    export XPANDER_API_KEY="your_api_key"
+    export XPANDER_ORGANIZATION_ID="your_org_id"
+    export XPANDER_AGENT_ID="your_agent_id"
+    ```
+  </Step>
+
+  <Step title="Register your auth handler">
+    Use `@on_auth_event` at module level so it is registered before the event loop starts:
+
+    ```python
+    from xpander_sdk import on_auth_event
+
+    @on_auth_event
+    async def handle_auth(agent, task, event):
+        login_url = event.data.get("auth_url") if isinstance(event.data, dict) else event.data
+        print(f"Please log in at: {login_url}")
+    ```
+  </Step>
+
+  <Step title="Create a task with streaming enabled">
+    Pass `events_streaming=True` when creating the task to receive auth events through the stream:
+
+    ```python
+    task = await agent.acreate_task(
+        prompt="Your prompt here",
+        events_streaming=True
+    )
+    ```
+  </Step>
+
+  <Step title="Iterate over events">
+    ```python
+    async for event in task.aevents():
+        if event.type == "auth_event":
+            # Handle inline if you prefer not to use the decorator
+            print(f"Auth required: {event.data}")
+    ```
+  </Step>
+</Steps>
+
+## Use cases
+
+| Scenario | Recommended approach |
+|----------|---------------------|
+| Show a login URL in a CLI or web UI | `@on_auth_event` — display `event.data` to the user |
+| Log all auth events globally | `@on_auth_event` with a logging handler |
+| Trigger token refresh for a specific call | `auth_events_callback` in `aget_args()` |
+| Debug permission or OAuth issues | Stream events with `events_streaming=True` and inspect `event.data` |
+| Secure enterprise integrations | Combine both — global decorator for audit log, per-call callback for workflow logic |

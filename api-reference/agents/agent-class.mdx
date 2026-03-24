@@ -1,0 +1,687 @@
+---
+title: "Agent class"
+description: "API reference for the Agent class — full agent management and task execution"
+---
+
+The `Agent` class represents a fully loaded agent on the xpander.ai platform. It provides methods for task creation, tool invocation, knowledge base access, session management, and storage operations.
+
+---
+
+## Loading
+
+### `aload()`
+
+Asynchronously load an agent by its unique ID. This is a class method and the primary way to obtain an `Agent` instance directly.
+
+```python
+@classmethod
+async def aload(
+    agent_id: str,
+    configuration: Optional[Configuration] = None,
+    version: Optional[int] = None
+) -> Agent
+```
+
+<ParamField body="agent_id" type="str" required={true}>
+  Unique identifier of the agent to load.
+</ParamField>
+
+<ParamField body="configuration" type="Configuration" required={false}>
+  SDK configuration object. If `None`, a default `Configuration()` is used.
+</ParamField>
+
+<ParamField body="version" type="int" required={false}>
+  Specific agent version to load. If `None`, the latest version is loaded.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="agent" type="Agent">
+  Loaded `Agent` instance with complete configuration, graph, and tools.
+</ResponseField>
+
+**Raises**
+
+- `ModuleException` — If the agent is not found or the request fails.
+
+---
+
+### `load()`
+
+Synchronous version of [`aload()`](#aload).
+
+```python
+@classmethod
+def load(
+    agent_id: str,
+    configuration: Optional[Configuration] = None,
+    version: Optional[int] = None
+) -> Agent
+```
+
+<ParamField body="agent_id" type="str" required={true}>
+  Unique identifier of the agent to load.
+</ParamField>
+
+<ParamField body="configuration" type="Configuration" required={false}>
+  SDK configuration object.
+</ParamField>
+
+<ParamField body="version" type="int" required={false}>
+  Specific agent version to load.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="agent" type="Agent">
+  Loaded `Agent` instance.
+</ResponseField>
+
+---
+
+## Task methods
+
+### `acreate_task()`
+
+Asynchronously create a new task and link it to this agent.
+
+```python
+async def acreate_task(
+    prompt: Optional[str] = "",
+    existing_task_id: Optional[str] = None,
+    file_urls: Optional[List[str]] = [],
+    user_details: Optional[User] = None,
+    agent_version: Optional[str] = None,
+    tool_call_payload_extension: Optional[dict] = None,
+    source: Optional[str] = "sdk",
+    worker_id: Optional[str] = None,
+    run_locally: Optional[bool] = False,
+    output_format: Optional[OutputFormat] = None,
+    output_schema: Optional[Dict] = None,
+    events_streaming: Optional[bool] = False,
+    additional_context: Optional[str] = None,
+    instructions_override: Optional[str] = None,
+    expected_output: Optional[str] = None,
+    mcp_servers: Optional[List[MCPServerDetails]] = [],
+    title: Optional[str] = None,
+    think_mode: Optional[ThinkMode] = ThinkMode.Default,
+    disable_attachment_injection: Optional[bool] = False,
+    return_metrics: Optional[bool] = False,
+    user_tokens: Optional[Dict] = None
+) -> Task
+```
+
+<ParamField body="prompt" type="str" required={false}>
+  Task initiation prompt text.
+</ParamField>
+
+<ParamField body="existing_task_id" type="str" required={false}>
+  ID of an existing task to resume or link to. If provided, the task is associated with this ID rather than creating a new one.
+</ParamField>
+
+<ParamField body="file_urls" type="List[str]" required={false}>
+  List of file URLs related to the task. These files are accessible to the agent during execution.
+</ParamField>
+
+<ParamField body="user_details" type="User" required={false}>
+  User context linked to this task.
+</ParamField>
+
+<ParamField body="agent_version" type="str" required={false}>
+  Specific agent version to use for this task. Overrides the loaded agent version.
+</ParamField>
+
+<ParamField body="tool_call_payload_extension" type="dict" required={false}>
+  Additional data to extend every tool call payload made during this task.
+</ParamField>
+
+<ParamField body="source" type="str" required={false}>
+  Origin or source of the request. Defaults to `"sdk"`.
+</ParamField>
+
+<ParamField body="worker_id" type="str" required={false}>
+  Worker identifier, if the task is dispatched to a specific worker.
+</ParamField>
+
+<ParamField body="run_locally" type="bool" required={false}>
+  When `True`, indicates the task should run in the local environment rather than on the platform.
+</ParamField>
+
+<ParamField body="output_format" type="OutputFormat" required={false}>
+  Desired format for the task output (e.g., `OutputFormat.Json`, `OutputFormat.Markdown`).
+</ParamField>
+
+<ParamField body="output_schema" type="Dict" required={false}>
+  JSON schema defining the expected structure of the output when `output_format` is `OutputFormat.Json`.
+</ParamField>
+
+<ParamField body="events_streaming" type="bool" required={false}>
+  When `True`, enables real-time event streaming for this task.
+</ParamField>
+
+<ParamField body="additional_context" type="str" required={false}>
+  Additional context string passed to the agent alongside the prompt.
+</ParamField>
+
+<ParamField body="instructions_override" type="str" required={false}>
+  Additional instructions appended to the agent's system prompt for this task only.
+</ParamField>
+
+<ParamField body="expected_output" type="str" required={false}>
+  Description of the expected output, used to guide agent execution.
+</ParamField>
+
+<ParamField body="mcp_servers" type="List[MCPServerDetails]" required={false}>
+  Optional list of MCP servers to make available during this task.
+</ParamField>
+
+<ParamField body="title" type="str" required={false}>
+  Optional human-readable title for the task.
+</ParamField>
+
+<ParamField body="think_mode" type="ThinkMode" required={false}>
+  Task reasoning mode. Defaults to `ThinkMode.Default`.
+</ParamField>
+
+<ParamField body="disable_attachment_injection" type="bool" required={false}>
+  When `True`, disables injection of file attachments into the context window.
+</ParamField>
+
+<ParamField body="return_metrics" type="bool" required={false}>
+  When `True`, returns execution metrics in the response. Available only for Workflow → Agent invocations.
+</ParamField>
+
+<ParamField body="user_tokens" type="Dict" required={false}>
+  User tokens to be injected for MCP authentication.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="task" type="Task">
+  The created `Task` object linked to this agent.
+</ResponseField>
+
+**Raises**
+
+- `ModuleException` — On task creation failure.
+
+---
+
+### `create_task()`
+
+Synchronous version of [`acreate_task()`](#acreate_task). Accepts the same parameters.
+
+```python
+def create_task(**kwargs) -> Task
+```
+
+**Returns**
+
+<ResponseField name="task" type="Task">
+  The created `Task` object.
+</ResponseField>
+
+---
+
+## Tool methods
+
+### `ainvoke_tool()`
+
+Asynchronously invoke a specific tool that is linked to the agent.
+
+```python
+async def ainvoke_tool(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict] = {},
+    task_id: Optional[str] = None,
+    tool_call_id: Optional[str] = None
+) -> ToolInvocationResult
+```
+
+<ParamField body="tool" type="Tool" required={true}>
+  The `Tool` instance to invoke. Typically retrieved from `agent.tools.get_tool_by_id()`.
+</ParamField>
+
+<ParamField body="payload" type="Any" required={true}>
+  Data payload passed to the tool. Structure depends on the tool's expected input schema.
+</ParamField>
+
+<ParamField body="payload_extension" type="Dict" required={false}>
+  Optional extra data merged into the tool call payload.
+</ParamField>
+
+<ParamField body="task_id" type="str" required={false}>
+  Task ID to associate with this tool invocation.
+</ParamField>
+
+<ParamField body="tool_call_id" type="str" required={false}>
+  Optional identifier for this specific tool call, used for tracking.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="result" type="ToolInvocationResult">
+  Result object containing execution details. Check `result.is_success` to verify success.
+</ResponseField>
+
+---
+
+### `invoke_tool()`
+
+Synchronous version of [`ainvoke_tool()`](#ainvoke_tool). Accepts the same parameters.
+
+```python
+def invoke_tool(
+    tool: Tool,
+    payload: Any,
+    payload_extension: Optional[Dict] = {},
+    task_id: Optional[str] = None,
+    tool_call_id: Optional[str] = None
+) -> ToolInvocationResult
+```
+
+**Returns**
+
+<ResponseField name="result" type="ToolInvocationResult">
+  Result object with execution details.
+</ResponseField>
+
+---
+
+## Knowledge base methods
+
+### `attach_knowledge_base()`
+
+Attach a knowledge base to this agent at runtime. If the knowledge base is already linked, this is a no-op.
+
+```python
+def attach_knowledge_base(
+    knowledge_base: Optional[KnowledgeBase] = None,
+    knowledge_base_id: Optional[str] = None
+) -> None
+```
+
+<ParamField body="knowledge_base" type="KnowledgeBase" required={false}>
+  A `KnowledgeBase` instance to attach. Mutually exclusive with `knowledge_base_id`.
+</ParamField>
+
+<ParamField body="knowledge_base_id" type="str" required={false}>
+  The unique identifier of the knowledge base to attach. Mutually exclusive with `knowledge_base`.
+</ParamField>
+
+**Raises**
+
+- `ValueError` — If neither `knowledge_base` nor `knowledge_base_id` is provided.
+- `TypeError` — If `knowledge_base` is provided but is not a valid `KnowledgeBase` instance.
+
+<Note>
+  This method only modifies the **runtime instance** of the agent. Changes are not persisted to the platform unless an explicit save or sync is called.
+</Note>
+
+---
+
+### `aget_knowledge_bases()`
+
+Asynchronously retrieve all knowledge bases linked to this agent.
+
+```python
+async def aget_knowledge_bases() -> List[KnowledgeBase]
+```
+
+**Returns**
+
+<ResponseField name="knowledge_bases" type="List[KnowledgeBase]">
+  List of `KnowledgeBase` objects linked to this agent.
+</ResponseField>
+
+---
+
+### `get_knowledge_bases()`
+
+Synchronous version of [`aget_knowledge_bases()`](#aget_knowledge_bases).
+
+```python
+def get_knowledge_bases() -> List[KnowledgeBase]
+```
+
+**Returns**
+
+<ResponseField name="knowledge_bases" type="List[KnowledgeBase]">
+  List of `KnowledgeBase` objects linked to this agent.
+</ResponseField>
+
+---
+
+## Connection methods
+
+### `aget_connection_string()`
+
+Asynchronously retrieve the agent's database connection string. The result is cached after the first successful call.
+
+```python
+async def aget_connection_string() -> DatabaseConnectionString
+```
+
+**Returns**
+
+<ResponseField name="connection_string" type="DatabaseConnectionString">
+  A `DatabaseConnectionString` object containing `id`, `name`, `organization_id`, and a `connection_uri` with the database URI string.
+</ResponseField>
+
+**Raises**
+
+- `ModuleException` — On failure to retrieve the connection string.
+
+---
+
+### `get_connection_string()`
+
+Synchronous version of [`aget_connection_string()`](#aget_connection_string).
+
+```python
+def get_connection_string() -> DatabaseConnectionString
+```
+
+**Returns**
+
+<ResponseField name="connection_string" type="DatabaseConnectionString">
+  A `DatabaseConnectionString` object.
+</ResponseField>
+
+---
+
+## Session methods
+
+Session management requires the agent to be using the **Agno framework** with session storage enabled.
+
+### `aget_user_sessions()`
+
+Asynchronously retrieve all sessions associated with a user for this agent.
+
+```python
+async def aget_user_sessions(user_id: str) -> Any
+```
+
+<ParamField body="user_id" type="str" required={true}>
+  Identifier of the user whose sessions are to be retrieved.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="sessions" type="Any">
+  A list of session records associated with the given user.
+</ResponseField>
+
+**Raises**
+
+- `NotImplementedError` — If the agent framework does not support session storage.
+- `LookupError` — If session storage is not enabled for this agent.
+- `ImportError` — If required Agno storage dependencies are not installed.
+- `ValueError` — If the agent connection string is invalid.
+
+---
+
+### `get_user_sessions()`
+
+Synchronous version of [`aget_user_sessions()`](#aget_user_sessions).
+
+```python
+def get_user_sessions(user_id: str) -> Any
+```
+
+<ParamField body="user_id" type="str" required={true}>
+  Identifier of the user whose sessions are to be retrieved.
+</ParamField>
+
+---
+
+### `aget_session()`
+
+Asynchronously retrieve a single session by its ID.
+
+```python
+async def aget_session(session_id: str) -> Any
+```
+
+<ParamField body="session_id" type="str" required={true}>
+  Unique identifier of the session to retrieve.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="session" type="Any">
+  The session record if found, or `None` if the session does not exist.
+</ResponseField>
+
+**Raises**
+
+- `NotImplementedError`, `LookupError`, `ImportError`, `ValueError` — See [`aget_user_sessions()`](#aget_user_sessions) for details.
+
+---
+
+### `get_session()`
+
+Synchronous version of [`aget_session()`](#aget_session).
+
+```python
+def get_session(session_id: str) -> Any
+```
+
+<ParamField body="session_id" type="str" required={true}>
+  Unique identifier of the session to retrieve.
+</ParamField>
+
+---
+
+### `adelete_session()`
+
+Asynchronously delete a session by its ID.
+
+```python
+async def adelete_session(session_id: str) -> None
+```
+
+<ParamField body="session_id" type="str" required={true}>
+  Unique identifier of the session to delete.
+</ParamField>
+
+**Raises**
+
+- `NotImplementedError`, `LookupError`, `ImportError`, `ValueError` — See [`aget_user_sessions()`](#aget_user_sessions) for details.
+
+---
+
+### `delete_session()`
+
+Synchronous version of [`adelete_session()`](#adelete_session).
+
+```python
+def delete_session(session_id: str) -> None
+```
+
+<ParamField body="session_id" type="str" required={true}>
+  Unique identifier of the session to delete.
+</ParamField>
+
+---
+
+## Storage methods
+
+### `aget_db()`
+
+Asynchronously retrieve the storage backend for this agent. Only supported for agents using the **Agno framework** with session storage enabled.
+
+```python
+async def aget_db() -> AsyncPostgresDb
+```
+
+**Returns**
+
+<ResponseField name="db" type="AsyncPostgresDb">
+  An initialized `AsyncPostgresDb` (from `agno`) configured for this agent's session schema.
+</ResponseField>
+
+**Raises**
+
+- `NotImplementedError` — If the agent framework does not support storage.
+- `ImportError` — If `agno` extras are not installed. Run `pip install xpander-sdk[agno]`.
+- `ValueError` — If the connection string is invalid.
+- `LookupError` — If session storage is not enabled for this agent.
+
+---
+
+### `get_db()`
+
+Synchronous version of [`aget_db()`](#aget_db). Returns a synchronous `PostgresDb` client.
+
+```python
+def get_db() -> Any
+```
+
+**Returns**
+
+<ResponseField name="db" type="Any">
+  An initialized synchronous storage backend.
+</ResponseField>
+
+---
+
+## Properties
+
+<ResponseField name="mcp_servers" type="List[MCPServerDetails]">
+  List of MCP server details configured in the agent's execution graph. Derived from graph items of type `MCP`.
+</ResponseField>
+
+<ResponseField name="tools" type="ToolsRepository">
+  A `ToolsRepository` instance providing access to all tools registered with this agent.
+</ResponseField>
+
+<ResponseField name="graph" type="AgentGraph">
+  The agent's execution graph, containing all configured graph items and flow definitions.
+</ResponseField>
+
+<ResponseField name="llm_credentials" type="Optional[LLMCredentials]">
+  Optional custom LLM API credentials configured for this agent. When set, these credentials take priority over environment variables on xpander Cloud deployments. The credential value is securely stored and never exposed in plain text.
+</ResponseField>
+
+<ResponseField name="deployment_type" type="AgentDeploymentType">
+  Deployment mode for the agent. One of `AgentDeploymentType.Serverless` or `AgentDeploymentType.Container`.
+</ResponseField>
+
+<ResponseField name="has_knowledge_bases" type="bool">
+  `True` if one or more knowledge bases are linked to this agent, otherwise `False`. Alias for `search_knowledge`.
+</ResponseField>
+
+<ResponseField name="is_active" type="bool">
+  `True` if the agent's status is `AgentStatus.ACTIVE`, otherwise `False`.
+</ResponseField>
+
+<ResponseField name="output" type="AgentOutput">
+  Constructed output configuration for this agent, derived from `output_format` and `output_schema`. Contains `output_schema` (Pydantic model), `is_markdown`, and `use_json_mode`.
+</ResponseField>
+
+---
+
+## Code examples
+
+### Load and create a task
+
+```python
+import asyncio
+from xpander_sdk import Agent, Configuration
+
+async def main():
+    config = Configuration(api_key="your-api-key", organization_id="your-org-id")
+
+    # Load agent directly
+    agent = await Agent.aload(agent_id="your-agent-id", configuration=config)
+    print(f"Loaded agent: {agent.name}")
+
+    # Create a task
+    task = await agent.acreate_task(
+        prompt="Analyze this data",
+        file_urls=["https://example.com/data.csv"],
+        events_streaming=True,
+    )
+    print(f"Created task ID: {task.id}")
+
+asyncio.run(main())
+```
+
+### Invoke a tool
+
+```python
+# Retrieve and invoke a tool by ID
+email_tool = agent.tools.get_tool_by_id(
+    "XpanderEmailServiceSendEmailWithHtmlOrTextContent"
+)
+
+if email_tool:
+    payload = {
+        "body_params": {
+            "subject": "Hello",
+            "body_html": "<p>Hello world</p>",
+            "to": ["user@example.com"],
+        },
+        "path_params": {},
+        "query_params": {},
+    }
+    result = await agent.ainvoke_tool(tool=email_tool, payload=payload)
+    print(f"Tool success: {result.is_success}")
+```
+
+### Knowledge base operations
+
+```python
+from xpander_sdk import KnowledgeBases
+
+# Attach a knowledge base by ID
+agent.attach_knowledge_base(knowledge_base_id="kb-12345")
+
+# Or attach using an instance
+kb_manager = KnowledgeBases(configuration=config)
+kb = await kb_manager.aget(knowledge_base_id="kb-12345")
+agent.attach_knowledge_base(knowledge_base=kb)
+
+# Retrieve linked knowledge bases
+kbs = await agent.aget_knowledge_bases()
+for kb in kbs:
+    print(f"Knowledge Base: {kb.name}")
+
+# Search across linked knowledge bases
+if agent.has_knowledge_bases:
+    retriever = agent.knowledge_bases_retriever()
+    results = retriever(query="pricing strategy", num_documents=5)
+    for result in results:
+        print(f"Document: {result['document_name']}")
+```
+
+### Session management
+
+```python
+# Get sessions for a user
+sessions = await agent.aget_user_sessions(user_id="user@example.com")
+print(f"Found {len(sessions)} sessions")
+
+if sessions:
+    session_id = sessions[0].id
+
+    # Retrieve a specific session
+    session = await agent.aget_session(session_id=session_id)
+
+    # Delete it when no longer needed
+    await agent.adelete_session(session_id=session_id)
+```
+
+### Storage access
+
+```python
+try:
+    db = await agent.aget_db()
+    print(f"Storage backend initialized: {db}")
+except NotImplementedError as e:
+    print(f"Storage not supported: {e}")
+except LookupError as e:
+    print(f"Storage not enabled: {e}")
+```

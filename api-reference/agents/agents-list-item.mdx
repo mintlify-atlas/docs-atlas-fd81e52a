@@ -1,0 +1,156 @@
+---
+title: "AgentsListItem class"
+description: "Summary agent item returned from Agents.alist()"
+---
+
+`AgentsListItem` represents a lightweight summary of an agent as returned by the [`Agents.alist()`](/api-reference/agents/agents-class#alist) and [`Agents.list()`](/api-reference/agents/agents-class#list) methods. It contains enough information to identify and display an agent, and provides methods to load the full `Agent` object when needed.
+
+---
+
+## Properties
+
+<ResponseField name="id" type="str">
+  Unique identifier for the agent.
+</ResponseField>
+
+<ResponseField name="name" type="str">
+  Human-readable name of the agent.
+</ResponseField>
+
+<ResponseField name="icon" type="str">
+  Icon identifier or URL for the agent.
+</ResponseField>
+
+<ResponseField name="status" type="AgentStatus">
+  Current operational status of the agent. One of `DRAFT`, `ACTIVE`, or `INACTIVE`.
+</ResponseField>
+
+<ResponseField name="organization_id" type="str">
+  ID of the organization that owns the agent.
+</ResponseField>
+
+<ResponseField name="created_at" type="datetime">
+  Timestamp when the agent was created.
+</ResponseField>
+
+<ResponseField name="description" type="Optional[str]">
+  Optional detailed description of the agent.
+</ResponseField>
+
+<ResponseField name="access_scope" type="Optional[AgentAccessScope]">
+  Access scope of the agent. Defaults to `AgentAccessScope.Personal`.
+</ResponseField>
+
+<ResponseField name="created_by" type="Optional[str]">
+  User ID of the agent's creator.
+</ResponseField>
+
+<ResponseField name="type" type="Optional[AgentType]">
+  Agent type, such as `Manager`, `Regular`, or `A2A`.
+</ResponseField>
+
+<ResponseField name="instructions" type="AgentInstructions">
+  Basic instruction configuration for the agent, including `role`, `goal`, and `general` description.
+</ResponseField>
+
+---
+
+## Methods
+
+### `aload()`
+
+Asynchronously load the complete `Agent` object from this list item. Fetches the full agent configuration, execution graph, and all associated metadata from the platform.
+
+```python
+async def aload(
+    configuration: Optional[Configuration] = None
+) -> Agent
+```
+
+<ParamField body="configuration" type="Configuration" required={false}>
+  SDK configuration object to use for the request. If `None`, uses the default configuration.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="agent" type="Agent">
+  A fully loaded [Agent](/api-reference/agents/agent-class) instance with complete configuration, graph, and tools.
+</ResponseField>
+
+**Raises**
+
+- `ModuleException` — If the agent cannot be loaded or access is denied.
+
+---
+
+### `load()`
+
+Synchronous version of [`aload()`](#aload). Internally calls the async method and blocks until complete.
+
+```python
+def load(
+    configuration: Optional[Configuration] = None
+) -> Agent
+```
+
+<ParamField body="configuration" type="Configuration" required={false}>
+  SDK configuration object to use for the request. If `None`, uses the default configuration.
+</ParamField>
+
+**Returns**
+
+<ResponseField name="agent" type="Agent">
+  A fully loaded [Agent](/api-reference/agents/agent-class) instance.
+</ResponseField>
+
+**Raises**
+
+- `ModuleException` — If the agent cannot be loaded or access is denied.
+
+---
+
+## Code examples
+
+### Iterate the list and load a specific agent
+
+```python
+import asyncio
+from xpander_sdk import Agents, Configuration
+
+async def main():
+    config = Configuration(api_key="your-api-key", organization_id="your-org-id")
+    agents_manager = Agents(configuration=config)
+
+    # List all agents — returns AgentsListItem objects
+    agent_items = await agents_manager.alist()
+
+    for item in agent_items:
+        print(f"Agent: {item.name} (ID: {item.id}, Status: {item.status})")
+
+    # Load the full Agent from the first list item
+    if agent_items:
+        full_agent = await agent_items[0].aload()
+        print(f"Loaded: {full_agent.name}")
+        print(f"Tools available: {len(full_agent.tools.functions)}")
+        assert full_agent.id == agent_items[0].id
+
+asyncio.run(main())
+```
+
+### Synchronous usage
+
+```python
+from xpander_sdk import Agents, Configuration
+
+config = Configuration(api_key="your-api-key", organization_id="your-org-id")
+agents_manager = Agents(configuration=config)
+
+agent_items = agents_manager.list()
+for item in agent_items:
+    print(f"{item.name}: {item.status}")
+
+# Load a specific agent synchronously
+if agent_items:
+    agent = agent_items[0].load(configuration=config)
+    print(f"Deployment type: {agent.deployment_type}")
+```

@@ -1,0 +1,195 @@
+---
+title: "Agents module"
+description: "List, load, and interact with AI agents — create tasks, invoke tools, manage sessions, and access MCP servers."
+---
+
+The Agents module is the primary entry point for working with AI agents on the xpander.ai platform. It provides classes for listing and retrieving agents, creating tasks, invoking tools, managing sessions, and accessing linked knowledge bases and MCP servers.
+
+<CardGroup cols={2}>
+  <Card title="List & retrieve agents" icon="list">
+    Fetch all agents or load a specific agent by ID with optional version pinning.
+  </Card>
+  <Card title="Create tasks" icon="play">
+    Attach a task to any agent with prompts, file URLs, output schemas, and event streaming.
+  </Card>
+  <Card title="Invoke tools" icon="wrench">
+    Call any tool in the agent's `ToolsRepository` directly and receive a structured result.
+  </Card>
+  <Card title="MCP servers" icon="server">
+    Inspect Model Context Protocol servers configured for an agent at runtime.
+  </Card>
+  <Card title="Knowledge bases" icon="book">
+    Attach, list, and search knowledge bases linked to an agent.
+  </Card>
+  <Card title="Session management" icon="clock">
+    Read, retrieve, and delete user sessions backed by the agent's storage layer.
+  </Card>
+</CardGroup>
+
+## Key classes
+
+| Class | Purpose |
+|---|---|
+| `Agents` | Manages the collection of agents — list and get |
+| `AgentsListItem` | Lightweight summary returned by `alist()`; call `.aload()` for full details |
+| `Agent` | A fully-loaded agent with all capabilities |
+| `AgentDeploymentType` | Enum: `Serverless` or `Container` |
+
+## Examples
+
+### List and load agents
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    from xpander_sdk import Agents, Configuration
+
+    config = Configuration(api_key="your-api-key", organization_id="your-org-id")
+    agents_manager = Agents(configuration=config)
+
+    # List all agents
+    all_agents = await agents_manager.alist()
+    for agent_item in all_agents:
+        print(f"Agent: {agent_item.name} (ID: {agent_item.id})")
+
+    # Load a specific agent by ID
+    agent = await agents_manager.aget(agent_id="your-agent-id")
+    print(f"Loaded agent: {agent.name}")
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    from xpander_sdk import Agents, Configuration
+
+    config = Configuration(api_key="your-api-key", organization_id="your-org-id")
+    agents_manager = Agents(configuration=config)
+
+    all_agents = agents_manager.list()
+    for agent_item in all_agents:
+        print(f"Agent: {agent_item.name} (ID: {agent_item.id})")
+
+    agent = agents_manager.get(agent_id="your-agent-id")
+    print(f"Loaded agent: {agent.name}")
+    ```
+  </Tab>
+</Tabs>
+
+You can also load the full `Agent` object directly from a list item:
+
+```python
+agents_list = await agents_manager.alist()
+if agents_list:
+    full_agent = await agents_list[0].aload()
+    print(f"Loaded agent: {full_agent.name}")
+    assert full_agent.id == agents_list[0].id
+```
+
+### Create a task
+
+```python
+# Basic task
+prompt = "what can you do"
+task = await agent.acreate_task(prompt=prompt)
+print(f"Created task ID: {task.id}")
+print(f"Task agent ID: {task.agent_id}")
+print(f"Task input: {task.input.text}")
+
+# Task with advanced options
+task_with_options = await agent.acreate_task(
+    prompt="Analyze this data",
+    file_urls=["https://example.com/data.csv"],
+    events_streaming=True,  # Enable real-time event streaming
+    output_format=OutputFormat.Json,
+    output_schema={"analysis": "string", "insights": "array"}
+)
+```
+
+<Tip>
+Set `events_streaming=True` to stream real-time `TaskUpdateEvent` objects via `task.aevents()`. See the [Events module](/modules/events) for details.
+</Tip>
+
+### Invoke a tool through the agent
+
+```python
+# Access the agent's tools repository
+tools_repo = agent.tools
+print(f"Available tools: {len(tools_repo.functions)}")
+
+# Look up a specific tool and invoke it
+email_tool = tools_repo.get_tool_by_id("XpanderEmailServiceSendEmailWithHtmlOrTextContent")
+if email_tool:
+    payload = {
+        "body_params": {
+            "subject": "Test email",
+            "body_html": "Hello world",
+            "to": ["user@example.com"],
+        },
+        "path_params": {},
+        "query_params": {},
+    }
+    result = await agent.ainvoke_tool(tool=email_tool, payload=payload)
+    print(f"Tool execution success: {result.is_success}")
+```
+
+### Check deployment type
+
+```python
+from xpander_sdk import AgentDeploymentType
+
+if agent.deployment_type == AgentDeploymentType.Serverless:
+    print("Agent is configured for serverless deployment")
+elif agent.deployment_type == AgentDeploymentType.Container:
+    print("Agent is configured for container deployment")
+```
+
+<Note>
+**Serverless** agents run in a serverless environment, ideal for lightweight tasks. **Container** agents run in a containerized environment, suited for resource-intensive operations.
+</Note>
+
+### MCP server access
+
+```python
+if agent.mcp_servers:
+    for mcp_server in agent.mcp_servers:
+        print(f"MCP Server: {mcp_server.name}")
+        print(f"Type: {mcp_server.type}")
+        print(f"Command: {mcp_server.command}")
+```
+
+### Session management
+
+```python
+# Retrieve sessions for a user
+user_sessions = await agent.aget_user_sessions(user_id="user@example.com")
+print(f"Found {len(user_sessions)} sessions")
+
+if user_sessions:
+    session_id = user_sessions[0].id
+    session_details = await agent.aget_session(session_id=session_id)
+    print(f"Session details: {session_details}")
+
+    # Delete when no longer needed
+    await agent.adelete_session(session_id=session_id)
+```
+
+<Warning>
+Session management requires an agent built on the Agno framework with session storage enabled. Calling session methods on unsupported agents raises `NotImplementedError` or `LookupError`.
+</Warning>
+
+## Error handling
+
+```python
+from xpander_sdk.exceptions import ModuleException
+
+try:
+    agent = await agents.aget(agent_id="invalid-id")
+except ModuleException as e:
+    print(f"Error {e.status_code}: {e.description}")
+```
+
+## API reference
+
+For full method signatures and parameter details, see:
+
+- [Agents class](/api-reference/agents/agents-class)
+- [Agent class](/api-reference/agents/agent-class)

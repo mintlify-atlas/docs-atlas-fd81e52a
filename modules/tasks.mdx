@@ -1,0 +1,211 @@
+---
+title: "Tasks module"
+description: "Create, track, update, and stream events for agent task executions, including external task reporting."
+---
+
+The Tasks module handles the full lifecycle of task executions on the xpander.ai platform. Use it to create tasks, poll or update their status, stream real-time events, and report results from external execution environments.
+
+<CardGroup cols={2}>
+  <Card title="Create & list tasks" icon="plus">
+    Create tasks for any agent and list them by agent ID.
+  </Card>
+  <Card title="Status management" icon="rotate">
+    Transition tasks through Pending → Executing → Completed (and error/stopped states) with `aset_status()` and `asave()`.
+  </Card>
+  <Card title="Event streaming" icon="satellite-dish">
+    Stream `TaskUpdateEvent` objects in real time when `events_streaming=True`.
+  </Card>
+  <Card title="External task reporting" icon="upload">
+    Report results from pipelines that run outside xpander.ai using `areport_external_task()`.
+  </Card>
+  <Card title="Internal status" icon="tag">
+    Store up to 255 characters of custom context alongside the standard task status.
+  </Card>
+  <Card title="File handling" icon="file">
+    Convert task file attachments into Agno-compatible `File` and `Image` objects.
+  </Card>
+</CardGroup>
+
+## Key classes
+
+| Class | Purpose |
+|---|---|
+| `Tasks` | Module-level manager — create, list, get, update, and stop tasks |
+| `TasksListItem` | Lightweight summary; call `.aload()` for the full `Task` |
+| `Task` | Single task with full state, methods, and event streaming |
+| `AgentExecutionStatus` | Enum of task statuses (see below) |
+
+### Task statuses
+
+| Value | Description |
+|---|---|
+| `Pending` | Waiting to be executed |
+| `Executing` | Currently being processed |
+| `Paused` | Temporarily paused |
+| `Error` | Encountered an error |
+| `Failed` | Failed to complete |
+| `Completed` | Finished successfully |
+| `Stopped` | Manually stopped |
+
+## Examples
+
+### Create and manage tasks
+
+<Tabs>
+  <Tab title="Async">
+    ```python
+    from xpander_sdk import Tasks
+
+    tasks = Tasks(configuration=config)
+
+    # Create a task
+    new_task = await tasks.acreate(
+        agent_id="agent123",
+        prompt="Analyze the sales data",
+        file_urls=["https://example.com/data.csv"],
+    )
+
+    # List tasks for an agent
+    task_list = await tasks.alist(agent_id="agent123")
+    for task in task_list:
+        print(f"Task ID: {task.id}, Status: {task.status}")
+    ```
+  </Tab>
+  <Tab title="Sync">
+    ```python
+    from xpander_sdk import Tasks
+
+    tasks = Tasks(configuration=config)
+
+    new_task = tasks.create(
+        agent_id="agent123",
+        prompt="Analyze the sales data",
+        file_urls=["https://example.com/data.csv"],
+    )
+
+    task_list = tasks.list(agent_id="agent123")
+    for task in task_list:
+        print(f"Task ID: {task.id}, Status: {task.status}")
+    ```
+  </Tab>
+</Tabs>
+
+### Update task status and save
+
+```python
+# Retrieve a specific task
+specific_task = await tasks.aget(task_id="task456")
+
+# Transition the status
+await specific_task.aset_status(AgentExecutionStatus.Completed)
+
+# Set a custom internal status (max 255 characters)
+specific_task.internal_status = "Processing customer data"
+
+# Persist changes to the platform
+await specific_task.asave()
+```
+
+<Note>
+The `internal_status` field is independent of the main `status` field. It is set once per task and persisted when `asave()` is called. Maximum length is 255 characters.
+</Note>
+
+### Stream task events
+
+```python
+# Create a task with event streaming enabled
+new_task = await tasks.acreate(
+    agent_id="agent123",
+    prompt="Analyze the sales data",
+    events_streaming=True
+)
+
+# Consume events asynchronously
+async for event in new_task.aevents():
+    print(f"Event Type: {event.type}")
+    print(f"Event Data: {event.data}")
+```
+
+<Tabs>
+  <Tab title="Async streaming">
+    ```python
+    async for event in new_task.aevents():
+        print(f"Event Type: {event.type}")
+        print(f"Event Data: {event.data}")
+    ```
+  </Tab>
+  <Tab title="Sync streaming">
+    ```python
+    # For non-async environments
+    for event in new_task.events():
+        print(f"Event: {event}")
+    ```
+  </Tab>
+</Tabs>
+
+### Report an external task
+
+Use `areport_external_task` when you run agent logic outside the xpander.ai platform and want to record the result:
+
+```python
+import uuid
+from xpander_sdk.modules.tasks.sub_modules.task import Task
+from xpander_sdk.models.shared import Tokens
+
+# Simple report
+task_id = str(uuid.uuid4())
+reported_task = await Task.areport_external_task(
+    agent_id="agent123",
+    id=task_id,
+    input="Process inventory data",
+    result="Successfully updated 500 inventory items"
+)
+
+# Report with full execution details
+tokens = Tokens(
+    completion_tokens=200,
+    prompt_tokens=75,
+    total_tokens=275
+)
+
+reported_task = await Task.areport_external_task(
+    agent_id="agent123",
+    id=str(uuid.uuid4()),
+    input="Generate monthly financial report",
+    llm_response={"content": "Report generated successfully", "model": "gpt-4"},
+    tokens=tokens,
+    is_success=True,
+    result="Monthly financial report generated with insights",
+    duration=8.7,
+    used_tools=["financial_analyzer", "chart_generator", "pdf_creator"]
+)
+
+print(f"Reported task ID: {reported_task.id}")
+print(f"Task status: {reported_task.status}")
+```
+
+### Internal status tracking
+
+```python
+# Create a task
+task = await tasks.acreate(
+    agent_id="agent123",
+    prompt="Analyze customer feedback"
+)
+
+# ... your processing logic ...
+
+# Set custom internal status before saving (max 255 characters)
+task.internal_status = "Sentiment analysis completed with 95% confidence"
+await task.asave()  # internal_status is persisted here
+
+print(f"Task Status: {task.status}")
+print(f"Internal Status: {task.internal_status}")
+```
+
+## API reference
+
+For full method signatures and parameter details, see:
+
+- [Tasks class](/api-reference/tasks/tasks-class)
+- [Task class](/api-reference/tasks/task-class)

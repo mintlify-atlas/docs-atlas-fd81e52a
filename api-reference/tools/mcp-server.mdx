@@ -1,0 +1,184 @@
+---
+title: "MCP server configuration"
+description: "MCPServerDetails, MCPServerType, MCPServerTransport, and MCPServerAuthType"
+---
+
+xpander.ai supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io) for connecting agents to external tool servers. Once configured, MCP tools are automatically loaded into the agent's `ToolsRepository` alongside any locally registered tools.
+
+## Import
+
+```python
+from xpander_sdk import MCPServerDetails, MCPServerType, MCPServerAuthType
+```
+
+## MCPServerDetails
+
+Configuration object describing an MCP server to connect to.
+
+```python
+class MCPServerDetails(BaseModel):
+    type: Optional[MCPServerType] = MCPServerType.Remote
+    name: Optional[str] = None
+    command: Optional[str] = None
+    url: Optional[str] = None
+    transport: Optional[MCPServerTransport] = MCPServerTransport.HTTP_Transport
+    auth_type: Optional[MCPServerAuthType] = MCPServerAuthType._None
+    api_key: Optional[str] = None
+    use_secrets_manager: Optional[bool] = False
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    headers: Optional[Dict] = {}
+    env_vars: Optional[Dict] = {}
+    allowed_tools: Optional[List[str]] = []
+    additional_scopes: Optional[List[str]] = []
+    share_user_token_across_other_agents: Optional[bool] = True
+```
+
+<ResponseField name="type" type="MCPServerType">
+  Whether the server is `Local` or `Remote`. Defaults to `MCPServerType.Remote`.
+</ResponseField>
+
+<ResponseField name="name" type="str">
+  A friendly identifier for the MCP server.
+</ResponseField>
+
+<ResponseField name="command" type="str">
+  The command to launch a local (STDIO) MCP server process, e.g. `"python"`.
+</ResponseField>
+
+<ResponseField name="url" type="str">
+  The URL of a remote HTTP MCP server.
+</ResponseField>
+
+<ResponseField name="transport" type="MCPServerTransport">
+  Transport protocol: `STDIO`, `SSE`, or `HTTP_Transport` (streamable HTTP). Defaults to `HTTP_Transport`.
+</ResponseField>
+
+<ResponseField name="auth_type" type="MCPServerAuthType">
+  Authentication type for the server. Defaults to `MCPServerAuthType._None`.
+</ResponseField>
+
+<ResponseField name="api_key" type="str">
+  API key used when `auth_type` is `APIKey`.
+</ResponseField>
+
+<ResponseField name="use_secrets_manager" type="bool">
+  When `True`, credentials are retrieved from the secrets manager rather than set directly. Defaults to `False`.
+</ResponseField>
+
+<ResponseField name="client_id" type="str">
+  OAuth 2.0 client ID, used when `auth_type` is `OAuth2`.
+</ResponseField>
+
+<ResponseField name="client_secret" type="str">
+  OAuth 2.0 client secret, used when `auth_type` is `OAuth2`.
+</ResponseField>
+
+<ResponseField name="headers" type="Dict">
+  Custom HTTP headers to send with requests. Used when `auth_type` is `CustomHeaders`.
+</ResponseField>
+
+<ResponseField name="env_vars" type="Dict">
+  Environment variables to set when launching a local (STDIO) MCP server process.
+</ResponseField>
+
+<ResponseField name="allowed_tools" type="List[str]">
+  Restrict which tools are exposed from this server. An empty list means all tools are allowed.
+</ResponseField>
+
+<ResponseField name="additional_scopes" type="List[str]">
+  Additional OAuth 2.0 scopes to request.
+</ResponseField>
+
+<ResponseField name="share_user_token_across_other_agents" type="bool">
+  Whether OAuth tokens are shared with other agents in the same organization. Defaults to `True`.
+</ResponseField>
+
+## MCPServerType
+
+```python
+class MCPServerType(str, Enum):
+    Local  = "local"   # Server process runs locally (STDIO)
+    Remote = "remote"  # Server is reachable via HTTP/SSE
+```
+
+## MCPServerTransport
+
+```python
+class MCPServerTransport(str, Enum):
+    STDIO          = "stdio"            # Standard input/output (local process)
+    SSE            = "sse"              # Server-Sent Events
+    HTTP_Transport = "streamable-http"  # Streamable HTTP (default)
+```
+
+## MCPServerAuthType
+
+```python
+class MCPServerAuthType(str, Enum):
+    APIKey        = "api_key"
+    OAuth2        = "oauth2"
+    CustomHeaders = "custom_headers"
+    _None         = "none"  # No authentication (default)
+```
+
+## Examples
+
+### Local STDIO server
+
+A local MCP server started as a child process via standard I/O:
+
+```python
+from xpander_sdk import MCPServerDetails, MCPServerType, MCPServerAuthType
+from xpander_sdk.modules.tools_repository.models.mcp import MCPServerTransport
+
+mcp_server = MCPServerDetails(
+    name="data-server",
+    type=MCPServerType.Local,
+    command="python",
+    transport=MCPServerTransport.STDIO,
+    env_vars={"API_KEY": "your-api-key"}
+)
+```
+
+### Remote HTTP server with API key authentication
+
+```python
+from xpander_sdk import MCPServerDetails, MCPServerType, MCPServerAuthType
+
+mcp_server = MCPServerDetails(
+    name="remote-tools",
+    type=MCPServerType.Remote,
+    url="https://mcp.example.com/tools",
+    auth_type=MCPServerAuthType.APIKey,
+    api_key="mcp-server-api-key"
+)
+```
+
+### Remote server with OAuth 2.0
+
+```python
+mcp_server = MCPServerDetails(
+    name="oauth-server",
+    type=MCPServerType.Remote,
+    url="https://mcp.example.com",
+    auth_type=MCPServerAuthType.OAuth2,
+    client_id="your-client-id",
+    client_secret="your-client-secret",
+    additional_scopes=["read:data", "write:data"]
+)
+```
+
+### Restrict exposed tools
+
+```python
+mcp_server = MCPServerDetails(
+    name="limited-server",
+    type=MCPServerType.Remote,
+    url="https://mcp.example.com",
+    allowed_tools=["search", "summarize"]  # Only expose these two tools
+)
+```
+
+<Note>
+  MCP server details are configured on the agent itself via the xpander.ai platform or API. Once configured, the tools from these servers are automatically populated into the agent's `ToolsRepository` when the agent is loaded. See the [Agents API reference](/api-reference/agents/agent-class) for details on accessing `agent.mcp_servers`.
+</Note>

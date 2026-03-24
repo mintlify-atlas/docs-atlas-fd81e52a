@@ -1,0 +1,226 @@
+---
+title: "Event types reference"
+description: "TaskUpdateEventType enum and event data models"
+---
+
+The xpander.ai SDK exposes two event systems: **agent event listeners** (for receiving tasks at agent deployment) and **task event streaming** (for monitoring real-time updates during task execution). This page documents the event types and data models used in both systems.
+
+## Import
+
+```python
+from xpander_sdk.models.events import TaskUpdateEventType, ToolCallRequest, ToolCallResult
+```
+
+## TaskUpdateEventType
+
+Enum used for type-safe event handling in task streaming. Values are strings for easy comparison.
+
+```python
+class TaskUpdateEventType(str, Enum):
+    # Task lifecycle
+    TaskCreated    = "task_created"         # Task was created
+    TaskUpdated    = "task_updated"         # Task status or data changed
+    TaskFinished   = "task_finished"        # Task completed (success or failure)
+
+    # Tool calls
+    ToolCallRequest = "tool_call_request"   # Agent requested a tool invocation
+    ToolCallResult  = "tool_call_result"    # Tool invocation returned a result
+
+    # Multi-agent
+    SubAgentTrigger = "sub_agent_trigger"   # A sub-agent was triggered
+
+    # Streaming
+    Chunk           = "chunk"               # Streaming text chunk
+
+    # MCP authentication
+    AuthEvent       = "auth_event"          # Authentication event (e.g., OAuth)
+
+    # Reasoning
+    Think           = "think"               # Agent reasoning step
+    Analyze         = "analyze"             # Agent analysis step
+
+    # Planning
+    PlanUpdated     = "plan_updated"        # Agent execution plan changed
+
+    # Compactization
+    TaskCompactization = "task_compactization"
+```
+
+## Task event models
+
+### TaskUpdateEvent
+
+Represents a single event emitted during task execution.
+
+<ResponseField name="type" type="TaskUpdateEventType">
+  The event type. Use `TaskUpdateEventType` enum values for type-safe comparisons.
+</ResponseField>
+
+<ResponseField name="task_id" type="str">
+  The ID of the task this event relates to.
+</ResponseField>
+
+<ResponseField name="organization_id" type="str">
+  The organization ID associated with this event.
+</ResponseField>
+
+<ResponseField name="time" type="datetime">
+  Timestamp when the event was emitted (ISO 8601).
+</ResponseField>
+
+<ResponseField name="data" type="Task | ToolCallRequest | ToolCallResult | Any">
+  Event-specific payload:
+  - For `TaskCreated`, `TaskUpdated`, `TaskFinished`: a `Task` object
+  - For `ToolCallRequest`: a `ToolCallRequest` object
+  - For `ToolCallResult`: a `ToolCallResult` object
+</ResponseField>
+
+### ToolCallRequest
+
+Payload for `TaskUpdateEventType.ToolCallRequest` events.
+
+<ResponseField name="request_id" type="str">
+  Unique identifier for this tool call request.
+</ResponseField>
+
+<ResponseField name="operation_id" type="str">
+  The operation identifier for the requested tool.
+</ResponseField>
+
+<ResponseField name="tool_call_id" type="str | None">
+  Optional tool call identifier assigned by the LLM.
+</ResponseField>
+
+<ResponseField name="graph_node_id" type="str | None">
+  The agent graph node that triggered this tool call, if applicable.
+</ResponseField>
+
+<ResponseField name="tool_name" type="str | None">
+  The name of the tool being called.
+</ResponseField>
+
+<ResponseField name="payload" type="Any">
+  The input payload being passed to the tool.
+</ResponseField>
+
+<ResponseField name="reasoning" type="ToolCallRequestReasoning | None">
+  Optional reasoning context: `title` and `description` from the agent's reasoning step.
+</ResponseField>
+
+### ToolCallResult
+
+Payload for `TaskUpdateEventType.ToolCallResult` events. Extends `ToolCallRequest` with the result.
+
+<ResponseField name="result" type="Any">
+  The output returned by the tool.
+</ResponseField>
+
+<ResponseField name="is_error" type="bool">
+  `True` if the tool invocation resulted in an error. Defaults to `False`.
+</ResponseField>
+
+## Worker (agent) event types
+
+These event types are used internally by the agent deployment and worker management system:
+
+| Event type string | Description |
+|-------------------|-------------|
+| `"worker-registration"` | Worker successfully registered with the platform |
+| `"agent-execution"` | Task execution request received for an agent |
+| `"worker-heartbeat"` | Periodic heartbeat to maintain worker active status |
+| `"worker-finished"` | Worker has completed its lifecycle |
+| `"worker-environment-conflict"` | Environment conflict detected |
+
+## Examples
+
+### Streaming task events
+
+Create a task with `events_streaming=True`, then iterate over events:
+
+```python
+from xpander_sdk import Agent
+from xpander_sdk.models.events import TaskUpdateEventType, ToolCallRequest, ToolCallResult
+
+agent = Agent.load("agent-id")
+task = await agent.acreate_task(
+    prompt="Analyze this dataset",
+    events_streaming=True
+)
+
+async for event in task.aevents():
+    print(f"[{event.time}] {event.type}")
+
+    if event.type == TaskUpdateEventType.TaskCreated:
+        print(f"Task created: {event.data.id}")
+
+    elif event.type == TaskUpdateEventType.TaskUpdated:
+        print(f"Status: {event.data.status}")
+
+    elif event.type == TaskUpdateEventType.ToolCallRequest:
+        request: ToolCallRequest = event.data
+        print(f"Tool requested: {request.tool_name}")
+        print(f"  Request ID: {request.request_id}")
+        print(f"  Payload: {request.payload}")
+
+    elif event.type == TaskUpdateEventType.ToolCallResult:
+        result: ToolCallResult = event.data
+        print(f"Tool result: {result.tool_name}")
+        print(f"  Success: {not result.is_error}")
+        if result.is_error:
+            print(f"  Error: {result.result}")
+        else:
+            print(f"  Result: {result.result}")
+
+    elif event.type == TaskUpdateEventType.SubAgentTrigger:
+        print(f"Sub-agent triggered: {event.data}")
+
+    elif event.type == TaskUpdateEventType.TaskFinished:
+        print(f"Task finished with status: {event.data.status}")
+        print(f"Final result: {event.data.result}")
+        break
+```
+
+### Synchronous event streaming
+
+```python
+for event in task.events():
+    print(f"Event: {event.type} at {event.time}")
+    if event.type == "task_finished":
+        print("Task completed!")
+        break
+```
+
+### Type-safe matching with `match`
+
+```python
+from xpander_sdk.models.events import TaskUpdateEventType, ToolCallRequest, ToolCallResult
+
+async for event in task.aevents():
+    match event.type:
+        case TaskUpdateEventType.ToolCallRequest:
+            request: ToolCallRequest = event.data
+            print(f"Calling tool: {request.tool_name} (op: {request.operation_id})")
+
+        case TaskUpdateEventType.ToolCallResult:
+            result: ToolCallResult = event.data
+            print(f"Result: {'OK' if not result.is_error else 'ERROR'}")
+
+        case TaskUpdateEventType.TaskFinished:
+            print(f"Done: {event.data.status}")
+            break
+```
+
+### Filter for tool events only
+
+```python
+async for event in task.aevents():
+    if event.type in (
+        TaskUpdateEventType.ToolCallRequest,
+        TaskUpdateEventType.ToolCallResult
+    ):
+        if hasattr(event.data, 'tool_name'):
+            print(f"Tool event: {event.type} — {event.data.tool_name}")
+
+    elif event.type == TaskUpdateEventType.TaskFinished:
+        break
+```

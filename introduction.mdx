@@ -1,0 +1,95 @@
+---
+title: "xpander.ai SDK"
+description: "The official Python SDK for building, deploying, and managing AI agents at scale."
+---
+
+<img
+  src="https://media.brand.dev/288cc7c4-5cef-4376-950b-bdf0083eedae.png"
+  alt="xpander.ai"
+  style={{ height: "60px", marginBottom: "24px" }}
+/>
+
+# xpander.ai SDK
+
+The xpander.ai SDK is the official Python library for the xpander.ai **Backend-as-a-Service (BaaS)** platform. It gives you everything you need to create, deploy, and orchestrate AI agents — with production-grade tools, knowledge bases, event handling, and real-time streaming built in.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get a working AI agent running in under 5 minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Install via pip with optional framework extras
+  </Card>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Configure your API key and organization ID
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/agents/agents-class">
+    Explore the complete Python API surface
+  </Card>
+</CardGroup>
+
+## What you can build
+
+<CardGroup cols={2}>
+  <Card title="Agent Management" icon="robot">
+    Create, load, and manage AI agents. Control deployment types (Serverless or Container) and LLM credentials.
+  </Card>
+  <Card title="Task Execution" icon="play">
+    Run complex task workflows with file attachments, output schemas, and real-time status tracking.
+  </Card>
+  <Card title="Tools Integration" icon="wrench">
+    Register custom Python functions as agent tools with the `@register_tool` decorator. Integrate external services and MCP servers.
+  </Card>
+  <Card title="Knowledge Bases" icon="database">
+    Store and semantically search documents. Attach knowledge bases to agents for retrieval-augmented generation.
+  </Card>
+  <Card title="Event-Driven Agents" icon="bolt">
+    Deploy agents with `@on_task` event handlers. Use `@on_boot` and `@on_shutdown` for lifecycle management.
+  </Card>
+  <Card title="Real-time Streaming" icon="signal">
+    Stream task events via SSE including tool calls, status updates, and completion events.
+  </Card>
+</CardGroup>
+
+## Core modules
+
+| Module | Description |
+|--------|-------------|
+| [`Agents`](/modules/agents) | Create, list, load, and manage AI agents |
+| [`Tasks`](/modules/tasks) | Create tasks, track status, and stream events |
+| [`ToolsRepository`](/modules/tools) | Register and invoke tools (local and remote) |
+| [`KnowledgeBases`](/modules/knowledge-bases) | Manage document repositories with semantic search |
+| [`Events`](/modules/events) | Event-driven programming with decorators |
+| [`Backend`](/modules/backend) | Retrieve runtime arguments for Agno, Strands, and other frameworks |
+
+## Async/sync support
+
+Every public method in the SDK is available in both async and sync flavors:
+
+```python
+# Async (recommended for production)
+agent = await Agent.aload("agent-id")
+task = await agent.acreate_task(prompt="Analyze this data")
+
+# Sync (convenient for scripts and notebooks)
+agent = Agent.load("agent-id")
+task = agent.create_task(prompt="Analyze this data")
+```
+
+## Framework support
+
+The SDK integrates with major AI agent frameworks:
+
+- **Agno** — via `pip install xpander-sdk[agno]`
+- **Strands Agents** — included in the base install
+- **OpenAI Agents** — included in the base install
+
+## Requirements
+
+- Python 3.9+
+- An xpander.ai account with an API key
+- An organization ID
+
+<Note>
+  All API operations require a valid `XPANDER_API_KEY` and `XPANDER_ORGANIZATION_ID`. See the [Authentication guide](/authentication) for setup instructions.
+</Note>

@@ -1,0 +1,303 @@
+---
+title: "Tasks class"
+description: "API reference for the Tasks module — create, list, and manage tasks"
+---
+
+The `Tasks` class is the main entry point for managing tasks in xpander.ai. It provides both asynchronous and synchronous methods for creating, listing, retrieving, updating, and stopping tasks.
+
+## Constructor
+
+```python
+from xpander_sdk import Tasks
+from xpander_sdk.models.configuration import Configuration
+
+config = Configuration(api_key="your-api-key", organization_id="your-org-id")
+tasks = Tasks(configuration=config)
+```
+
+<ParamField path="configuration" type="Configuration" optional>
+  SDK configuration object. If not provided, uses default configuration from environment variables (`XPANDER_API_KEY`, `XPANDER_ORGANIZATION_ID`).
+</ParamField>
+
+---
+
+## Methods
+
+### `acreate` / `create`
+
+Create a new task for a specific agent.
+
+```python
+# Async
+new_task = await tasks.acreate(
+    agent_id="agent123",
+    prompt="Analyze the sales data",
+    file_urls=["https://example.com/data.csv"],
+    events_streaming=True
+)
+
+# Sync
+new_task = tasks.create(
+    agent_id="agent123",
+    prompt="Analyze the provided dataset",
+    file_urls=["https://data.source/file.csv"]
+)
+print(f"Created task: {new_task.id}")
+```
+
+<ParamField path="agent_id" type="str" required>
+  The unique identifier of the agent responsible for executing the task.
+</ParamField>
+
+<ParamField path="prompt" type="str" optional>
+  Textual input for task initiation. Defaults to an empty string.
+</ParamField>
+
+<ParamField path="file_urls" type="List[str]" optional>
+  List of URLs pointing to task-related files (PDFs, images, CSVs, etc.).
+</ParamField>
+
+<ParamField path="existing_task_id" type="str" optional>
+  Existing task ID to reuse instead of creating a new one.
+</ParamField>
+
+<ParamField path="user_details" type="User" optional>
+  User information to associate with the task.
+</ParamField>
+
+<ParamField path="agent_version" type="str" optional>
+  Specific agent version to target.
+</ParamField>
+
+<ParamField path="tool_call_payload_extension" type="dict" optional>
+  Additional data to extend the tool call payload.
+</ParamField>
+
+<ParamField path="source" type="str" optional>
+  Information about the task's origin.
+</ParamField>
+
+<ParamField path="worker_id" type="str" optional>
+  Identifier for the worker handling the task.
+</ParamField>
+
+<ParamField path="run_locally" type="bool" optional>
+  Whether to execute the task locally. Defaults to `False`.
+</ParamField>
+
+<ParamField path="output_format" type="OutputFormat" optional>
+  Format for the task output (e.g., JSON).
+</ParamField>
+
+<ParamField path="output_schema" type="Dict" optional>
+  Schema defining the expected output structure.
+</ParamField>
+
+<ParamField path="events_streaming" type="bool" optional>
+  Enable real-time event streaming for this task. Defaults to `False`. Required before calling `task.aevents()` or `task.events()`.
+</ParamField>
+
+<ParamField path="additional_context" type="str" optional>
+  Additional context to pass to the agent.
+</ParamField>
+
+<ParamField path="instructions_override" type="str" optional>
+  Additional instructions to append to the agent's system prompt.
+</ParamField>
+
+<ParamField path="expected_output" type="str" optional>
+  Description of the expected output of the execution.
+</ParamField>
+
+<ParamField path="mcp_servers" type="List[MCPServerDetails]" optional>
+  Optional list of MCP servers to use for this task.
+</ParamField>
+
+<ParamField path="triggering_agent_id" type="str" optional>
+  ID of the agent that triggered this task.
+</ParamField>
+
+<ParamField path="title" type="str" optional>
+  Optional human-readable title for the task.
+</ParamField>
+
+<ParamField path="think_mode" type="ThinkMode" optional>
+  Think mode for the task. Defaults to `ThinkMode.Default`.
+</ParamField>
+
+<ParamField path="disable_attachment_injection" type="bool" optional>
+  Disable injection of attachments into the agent's context window. Defaults to `False`.
+</ParamField>
+
+<ParamField path="return_metrics" type="bool" optional>
+  Return a metrics report. Available only for Workflow → Agent invocations. Defaults to `False`.
+</ParamField>
+
+<ParamField path="user_tokens" type="Dict" optional>
+  User tokens to inject for MCP authentication.
+</ParamField>
+
+**Returns:** `Task`
+
+---
+
+### `alist` / `list`
+
+List all tasks for a specific agent.
+
+```python
+# Async
+task_list = await tasks.alist(agent_id="agent123")
+for task in task_list:
+    print(f"Task ID: {task.id}, Status: {task.status}")
+
+# With filters
+task_list = await tasks.alist(
+    agent_id="agent123",
+    filters={"status": "completed", "user_id": "user456"}
+)
+
+# Sync
+task_list = tasks.list(agent_id="agent123")
+print(f"Found {len(task_list)} tasks")
+```
+
+<ParamField path="agent_id" type="str" required>
+  The unique identifier of the agent whose tasks should be listed.
+</ParamField>
+
+<ParamField path="filters" type="Dict" optional>
+  Optional query filters. Supported keys: `user_id`, `parent_task_id`, `triggering_agent_id`, `status`, `internal_status`.
+</ParamField>
+
+**Returns:** `List[TasksListItem]`
+
+---
+
+### `aget` / `get`
+
+Retrieve a specific task by its unique ID.
+
+```python
+# Async
+task = await tasks.aget(task_id="task456")
+print(f"Task status: {task.status}")
+
+# Sync
+task = tasks.get(task_id="task456")
+```
+
+<ParamField path="task_id" type="str" required>
+  Unique identifier of the task to retrieve.
+</ParamField>
+
+**Returns:** `Task`
+
+---
+
+### `aupdate` / `update`
+
+Update an existing task's attributes, status, or result.
+
+```python
+from xpander_sdk.modules.tasks.models.task import AgentExecutionStatus
+
+# Async
+updated_task = await tasks.aupdate(
+    task_id="task456",
+    status=AgentExecutionStatus.Completed,
+    result="Task successfully executed"
+)
+print(f"Updated status: {updated_task.status}")
+
+# Sync
+updated_task = tasks.update(
+    task_id="task456",
+    status=AgentExecutionStatus.Completed,
+    result="Task successfully executed"
+)
+```
+
+<ParamField path="task_id" type="str" required>
+  Unique identifier of the task to update.
+</ParamField>
+
+<ParamField path="status" type="AgentExecutionStatus" optional>
+  New status to apply to the task.
+</ParamField>
+
+<ParamField path="result" type="str" optional>
+  Result data or message to associate with the task.
+</ParamField>
+
+<ParamField path="tool_call_payload_extension" type="dict" optional>
+  Additional data to extend the tool call payload.
+</ParamField>
+
+<ParamField path="source" type="str" optional>
+  Updated source information for the task.
+</ParamField>
+
+<ParamField path="last_executed_node_id" type="str" optional>
+  Identifier of the last executed workflow node.
+</ParamField>
+
+**Returns:** `Task`
+
+---
+
+### `astop` / `stop`
+
+Stop a running task.
+
+```python
+# Async
+stopped_task = await tasks.astop(task_id="task456")
+print(f"Stopped task: {stopped_task.id}")
+
+# Sync
+stopped_task = tasks.stop(task_id="task456")
+```
+
+<ParamField path="task_id" type="str" required>
+  Unique identifier of the task to stop.
+</ParamField>
+
+**Returns:** `Task`
+
+---
+
+## Complete example
+
+```python
+import asyncio
+from xpander_sdk import Tasks
+from xpander_sdk.models.configuration import Configuration
+from xpander_sdk.modules.tasks.models.task import AgentExecutionStatus
+
+async def main():
+    config = Configuration(api_key="your-api-key", organization_id="your-org-id")
+    tasks = Tasks(configuration=config)
+
+    # Create a task
+    task = await tasks.acreate(
+        agent_id="agent123",
+        prompt="Analyze the sales data for Q3",
+        file_urls=["https://example.com/sales-q3.csv"],
+        events_streaming=True
+    )
+    print(f"Created task: {task.id}")
+
+    # List all tasks for the agent
+    task_list = await tasks.alist(agent_id="agent123")
+    for item in task_list:
+        print(f"  {item.id}: {item.status}")
+
+    # Stream events
+    async for event in task.aevents():
+        print(f"Event: {event.type}")
+        if task.status in (AgentExecutionStatus.Completed, AgentExecutionStatus.Failed):
+            break
+
+asyncio.run(main())
+```

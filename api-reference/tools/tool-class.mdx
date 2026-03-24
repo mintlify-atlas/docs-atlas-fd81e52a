@@ -1,0 +1,211 @@
+---
+title: "Tool class"
+description: "Individual tool with invocation capabilities and Pydantic schema validation"
+---
+
+The `Tool` class represents a single callable tool in the xpander.ai system. A tool can be local (backed by a Python function) or remote (invoked via the xpander.ai API). Both paths include Pydantic schema validation, error handling, and lifecycle hook support.
+
+## Import
+
+```python
+from xpander_sdk import Tool
+```
+
+## Key attributes
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `id` | `str` | Unique identifier for the tool |
+| `name` | `str` | Display name |
+| `description` | `str` | Human-readable description |
+| `method` | `str` | HTTP method used for remote invocation |
+| `path` | `str` | Endpoint path |
+| `is_local` | `bool` | Whether the tool runs locally |
+| `is_synced` | `bool` | Whether the tool has been synced with the backend |
+| `should_add_to_graph` | `bool` | Whether this tool should be added to agent execution graphs |
+| `parameters` | `Dict[str, Any]` | Raw JSON Schema for tool parameters |
+| `fn` | `Optional[Callable]` | The Python function for local tools |
+
+## Properties
+
+### `schema` → `type[BaseModel]`
+
+Dynamically constructs and returns a Pydantic model class based on the tool's `parameters` schema. Use this for payload validation before invocation.
+
+```python
+PayloadModel = tool.schema
+validated = PayloadModel.model_validate({"location": "London"})
+```
+
+## Methods
+
+### `ainvoke` (async)
+
+```python
+async def ainvoke(
+    agent_id: str,
+    payload: Any,
+    agent_version: Optional[str] = None,
+    payload_extension: Optional[Dict[str, Any]] = {},
+    configuration: Optional[Configuration] = None,
+    task_id: Optional[str] = None,
+    tool_call_id: Optional[str] = None,
+) -> ToolInvocationResult
+```
+
+Asynchronously invoke the tool with schema validation and full error handling. For local tools, calls the registered Python function. For remote tools, calls the xpander.ai API.
+
+Tool lifecycle hooks (`@on_tool_before`, `@on_tool_after`, `@on_tool_error`) are executed automatically around the invocation.
+
+<ParamField body="agent_id" type="str" required>
+  The ID of the agent making the call.
+</ParamField>
+
+<ParamField body="payload" type="Any" required>
+  The input data to pass to the tool. Will be validated against the tool's Pydantic schema.
+</ParamField>
+
+<ParamField body="agent_version" type="str" optional>
+  Optional agent version string. Sent as `x-agent-version` header for remote tools.
+</ParamField>
+
+<ParamField body="payload_extension" type="Dict[str, Any]" optional>
+  Additional key-value pairs to deep-merge into the payload before invocation.
+</ParamField>
+
+<ParamField body="configuration" type="Configuration" optional>
+  Override the tool's default configuration for this invocation.
+</ParamField>
+
+<ParamField body="task_id" type="str" optional>
+  The ID of the current task context. Sent as `x-execution-id` header for remote tools.
+</ParamField>
+
+<ParamField body="tool_call_id" type="str" optional>
+  A unique identifier for this specific tool call, useful for tracing.
+</ParamField>
+
+**Returns:** [`ToolInvocationResult`](#toolinvocationresult)
+
+```python
+result = await tool.ainvoke(
+    agent_id="agent-123",
+    payload={"location": "New York"},
+    task_id="task-456",
+    tool_call_id="call-789"
+)
+
+if result.is_success:
+    print(f"Result: {result.result}")
+else:
+    print(f"Error ({result.status_code}): {result.result}")
+```
+
+### `invoke` (sync)
+
+```python
+def invoke(
+    agent_id: str,
+    payload: Any,
+    agent_version: Optional[str] = None,
+    payload_extension: Optional[Dict[str, Any]] = {},
+    configuration: Optional[Configuration] = None,
+    task_id: Optional[str] = None,
+    tool_call_id: Optional[str] = None,
+) -> ToolInvocationResult
+```
+
+Synchronous wrapper around `ainvoke`. Accepts the same parameters and returns the same `ToolInvocationResult`. Use this in non-async environments.
+
+```python
+result = tool.invoke(
+    agent_id="agent-123",
+    payload={"location": "London"}
+)
+print(f"Result: {result.result}")
+```
+
+### `set_configuration`
+
+```python
+def set_configuration(configuration: Configuration) -> None
+```
+
+Update the tool's configuration. Called automatically by `ToolsRepository.list` to propagate the repository's configuration to each tool.
+
+<ParamField body="configuration" type="Configuration" required>
+  The configuration instance to associate with this tool.
+</ParamField>
+
+```python
+from xpander_sdk import Configuration
+
+config = Configuration(api_key="new-key", organization_id="org-id")
+tool.set_configuration(config)
+```
+
+## ToolInvocationResult
+
+All invocation methods return a `ToolInvocationResult` object.
+
+```python
+from xpander_sdk import ToolInvocationResult
+```
+
+<ResponseField name="tool_id" type="str">
+  The ID of the tool that was invoked.
+</ResponseField>
+
+<ResponseField name="payload" type="Any">
+  The original input payload passed to the tool.
+</ResponseField>
+
+<ResponseField name="result" type="Any">
+  The output returned by the tool on success, or an error message/HTTP body on failure.
+</ResponseField>
+
+<ResponseField name="is_success" type="bool">
+  `True` if the tool executed without errors.
+</ResponseField>
+
+<ResponseField name="is_error" type="bool">
+  `True` if the tool raised an exception or the remote API returned an error.
+</ResponseField>
+
+<ResponseField name="status_code" type="int">
+  HTTP status code. Defaults to `200`. Set to the HTTP error code or `500` on failure.
+</ResponseField>
+
+<ResponseField name="tool_call_id" type="str | None">
+  The `tool_call_id` passed at invocation time, if any.
+</ResponseField>
+
+<ResponseField name="task_id" type="str | None">
+  The `task_id` passed at invocation time, if any.
+</ResponseField>
+
+<ResponseField name="is_local" type="bool">
+  `True` if the tool was executed locally (i.e., backed by a Python function).
+</ResponseField>
+
+## Error handling
+
+```python
+from xpander_sdk.exceptions import ModuleException
+
+try:
+    result = await tool.ainvoke(
+        agent_id="agent-123",
+        payload={"invalid": "data"}
+    )
+except ValueError as e:
+    print(f"Schema validation failed: {e}")
+except ModuleException as e:
+    print(f"API error {e.status_code}: {e.description}")
+```
+
+If an exception is raised during invocation, it is caught internally and surfaced through `ToolInvocationResult`:
+
+- `is_error` is set to `True`
+- `result` contains the error message or HTTP response body
+- `status_code` is set to the HTTP status code or `500`

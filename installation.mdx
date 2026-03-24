@@ -1,0 +1,102 @@
+---
+title: "Installation"
+description: "Install the xpander.ai SDK via pip"
+---
+
+## Requirements
+
+- Python 3.9 or higher
+- An xpander.ai account with an API key and organization ID
+
+## Base install
+
+Install the SDK with pip:
+
+```bash
+pip install xpander-sdk
+```
+
+This installs the SDK along with all required dependencies.
+
+## Optional extras
+
+<CodeGroup>
+
+```bash Agno framework
+# Adds Agno 2.x support for framework-based agents
+pip install xpander-sdk[agno]
+```
+
+```bash Development
+# Adds testing tools and additional LLM provider libraries
+pip install xpander-sdk[dev]
+```
+
+</CodeGroup>
+
+<Note>
+  The `agno` extra pins `agno==2.5.9`. If you need a different Agno version, install it separately and manage the dependency yourself.
+</Note>
+
+## Using a requirements.txt file
+
+Add the SDK to your `requirements.txt`:
+
+```text requirements.txt
+xpander-sdk>=2.0.0
+```
+
+Then install:
+
+```bash
+pip install -r requirements.txt
+```
+
+## Dependencies
+
+The base install includes the following packages:
+
+| Package | Description |
+|---------|-------------|
+| `pydantic>=2.12.5` | Data validation and model serialization |
+| `httpx>=0.28.1` | Async HTTP client for API requests |
+| `httpx_sse>=0.4.3` | Server-Sent Events streaming support |
+| `loguru>=0.7.3` | Structured logging |
+| `nest-asyncio>=1.6.0` | Nested async event loop support |
+| `strands-agents>=1.20.0` | Strands Agents framework integration |
+| `openai-agents>=0.6.4` | OpenAI Agents framework integration |
+| `python-dotenv>=1.2.1` | `.env` file support |
+| `packaging>=25.0` | Package version utilities |
+
+### `agno` extra
+
+| Package | Description |
+|---------|-------------|
+| `agno==2.5.9` | Agno agent framework |
+| `sqlalchemy` | Database ORM (required by Agno) |
+| `psycopg[binary,pool]` | PostgreSQL driver (required by Agno) |
+| `greenlet` | Greenlet support for async Agno operations |
+
+### `dev` extra
+
+| Package | Description |
+|---------|-------------|
+| `pytest` | Test runner |
+| `black` | Code formatter |
+| `pre-commit` | Git hook manager |
+| `anthropic` | Anthropic Claude SDK |
+| `openai` | OpenAI SDK |
+| `mcp` | Model Context Protocol client |
+| `fireworks-ai` | Fireworks AI SDK |
+| `aioboto3` | Async AWS SDK |
+| `google-genai` | Google Generative AI SDK |
+| `azure-ai-inference` | Azure AI Inference SDK |
+| `aiohttp` | Async HTTP library |
+
+## Verify the install
+
+Confirm the SDK is installed and check the version:
+
+```bash
+python -c "import xpander_sdk; print('xpander-sdk installed')"
+```

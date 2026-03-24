@@ -1,0 +1,224 @@
+---
+title: "Error handling"
+description: "Handle exceptions and errors in the xpander.ai SDK"
+---
+
+The xpander SDK uses a small, focused exception hierarchy. Understanding these exceptions lets you write resilient code that recovers gracefully from API errors, invalid inputs, and tool failures.
+
+## ModuleException
+
+`ModuleException` is the primary exception raised by SDK modules when an API operation fails. It carries two attributes:
+
+| Attribute | Type | Description |
+|---|---|---|
+| `status_code` | `int` | HTTP status code from the platform (e.g. `404`, `401`, `500`) |
+| `description` | `str` | Human-readable description of the error |
+
+```python
+from xpander_sdk.exceptions import ModuleException
+
+class ModuleException(Exception):
+    def __init__(self, status_code: int, description: str):
+        self.status_code = status_code
+        self.description = description
+        super().__init__(f"[{status_code}] {description}")
+```
+
+## Common error scenarios
+
+<AccordionGroup>
+  <Accordion title="Agent not found (404)">
+    Raised by `agents.aget()`, `agents.get()`, `Agent.aload()`, and `Agent.load()` when the agent ID does not exist or is not accessible with the provided API key.
+
+    ```python
+    from xpander_sdk import Agents, Configuration
+    from xpander_sdk.exceptions import ModuleException
+
+    config = Configuration(
+        api_key="your-api-key",
+        organization_id="your-org-id"
+    )
+    agents = Agents(configuration=config)
+
+    try:
+        agent = await agents.aget(agent_id="invalid-id")
+    except ModuleException as e:
+        print(f"Error {e.status_code}: {e.description}")
+        # Error 404: Agent not found
+    ```
+  </Accordion>
+
+  <Accordion title="Unauthorized (401)">
+    Raised when the API key is missing, expired, or does not have permission for the requested operation.
+
+    ```python
+    from xpander_sdk import Agent
+    from xpander_sdk.exceptions import ModuleException
+
+    try:
+        agent = await Agent.aload("agent-id")
+    except ModuleException as e:
+        if e.status_code == 401:
+            print("Authentication failed — check your API key")
+        else:
+            print(f"Unexpected error {e.status_code}: {e.description}")
+    ```
+  </Accordion>
+
+  <Accordion title="Task creation failure">
+    Raised by `agent.acreate_task()` when the platform cannot create the task (for example, due to invalid parameters or service unavailability).
+
+    ```python
+    from xpander_sdk import Agent
+    from xpander_sdk.exceptions import ModuleException
+
+    agent = await Agent.aload("agent-id")
+
+    try:
+        task = await agent.acreate_task(
+            prompt="Analyze this data",
+            file_urls=["https://example.com/data.csv"]
+        )
+    except ModuleException as e:
+        print(f"Task creation failed: {e.description}")
+    ```
+  </Accordion>
+
+  <Accordion title="Tool invocation errors">
+    Raised by `tool.ainvoke()` or `agent.ainvoke_tool()` when the tool call fails. Also check `ToolInvocationResult.is_error` for tool-level errors that do not raise an exception.
+
+    ```python
+    from xpander_sdk.exceptions import ModuleException
+
+    try:
+        result = await tool.ainvoke(
+            agent_id="agent-123",
+            payload={"invalid": "data"}
+        )
+        # Tool-level errors are reported on the result object
+        if result.is_error:
+            print(f"Tool error: {result.result}")
+        else:
+            print(f"Tool result: {result.result}")
+    except ModuleException as e:
+        print(f"Tool execution failed: {e.description}")
+    except ValueError as e:
+        print(f"Invalid payload: {e}")
+    ```
+  </Accordion>
+
+  <Accordion title="Knowledge base attachment errors">
+    `agent.attach_knowledge_base()` raises standard Python exceptions for invalid inputs:
+
+    - `ValueError` — neither a `knowledge_base` instance nor a `knowledge_base_id` was provided
+    - `TypeError` — the provided `knowledge_base` is not a valid `KnowledgeBase` instance
+
+    ```python
+    from xpander_sdk import Agent
+
+    agent = await Agent.aload("agent-id")
+
+    try:
+        # Missing both arguments — raises ValueError
+        agent.attach_knowledge_base()
+    except ValueError as e:
+        print(f"ValueError: {e}")
+
+    try:
+        # Wrong type — raises TypeError
+        agent.attach_knowledge_base(knowledge_base="not-a-kb-object")
+    except TypeError as e:
+        print(f"TypeError: {e}")
+    ```
+  </Accordion>
+
+  <Accordion title="Session storage errors">
+    Session management methods (`aget_user_sessions`, `aget_session`, `adelete_session`) raise framework-specific errors when session storage is unavailable:
+
+    ```python
+    from xpander_sdk import Agent
+
+    agent = await Agent.aload("agent-id")
+
+    try:
+        storage = await agent.aget_db()
+    except NotImplementedError as e:
+        print(f"Storage not supported: {e}")
+    except LookupError as e:
+        print(f"Storage not enabled: {e}")
+    except ImportError as e:
+        print(f"Missing dependency: {e}")
+    except ValueError as e:
+        print(f"Invalid connection string: {e}")
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Try/except patterns
+
+### Agents
+
+```python
+from xpander_sdk import Agents, Configuration
+from xpander_sdk.exceptions import ModuleException
+
+config = Configuration(
+    api_key="your-api-key",
+    organization_id="your-org-id"
+)
+agents = Agents(configuration=config)
+
+try:
+    agent = await agents.aget(agent_id="invalid-id")
+except ModuleException as e:
+    print(f"Error {e.status_code}: {e.description}")
+```
+
+### Tasks
+
+```python
+from xpander_sdk import Tasks
+from xpander_sdk.exceptions import ModuleException
+
+tasks = Tasks(configuration=config)
+
+try:
+    task = await tasks.aget(task_id="task-id")
+    await task.aset_status(AgentExecutionStatus.Completed)
+    await task.asave()
+except ModuleException as e:
+    print(f"Task operation failed [{e.status_code}]: {e.description}")
+```
+
+### Tools
+
+```python
+from xpander_sdk.exceptions import ModuleException
+
+try:
+    result = await tool.ainvoke(
+        agent_id="agent-123",
+        payload={"invalid": "data"}
+    )
+except ModuleException as e:
+    print(f"Tool execution failed: {e.description}")
+except ValueError as e:
+    print(f"Invalid payload: {e}")
+```
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Always catch ModuleException" icon="shield">
+    Wrap every SDK API call in a `try/except ModuleException` block. Use `e.status_code` to distinguish between retryable errors (5xx) and permanent failures (4xx).
+  </Card>
+  <Card title="Check ToolInvocationResult" icon="wrench">
+    Tool calls can succeed at the HTTP level but still return an error payload. Always inspect `result.is_error` after invoking a tool, not just the absence of an exception.
+  </Card>
+  <Card title="Log status_code and description" icon="file-text">
+    Log both `e.status_code` and `e.description` to make debugging easier. The description contains the platform's error message, which is more informative than the status code alone.
+  </Card>
+  <Card title="Retry 5xx errors" icon="rotate-right">
+    HTTP 5xx errors (`500`, `502`, `503`) are typically transient. Implement exponential backoff for these. Do not retry 4xx errors — they indicate a problem with the request itself.
+  </Card>
+</CardGroup>
